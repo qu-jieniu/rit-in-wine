@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Launch Rotman Interactive Trader under Wine.
+export WINEPREFIX="${WINEPREFIX:-/config/.wine}"
+export WINEARCH="${WINEARCH:-win64}"
+export WINEDEBUG="${WINEDEBUG:--all}"
+exec wine start /unix "$WINEPREFIX/drive_c/Client.application"
