@@ -1,0 +1,21 @@
+# arm64 rootfs for RIT-aarch64.AppImage: Ubuntu arm64 + FEX-Emu + bubblewrap, with
+# the amd64 RIT payload baked in as FEX's x86 RootFS. The AppImage bundles this and
+# runs the x86 Wine/RIT under FEX (Rosetta-free) on any arm64 Linux host.
+# Build on an arm64 runner (ubuntu-24.04-arm).  BASE_AMD64 = the amd64 payload image.
+FROM ubuntu:24.04
+ARG BASE_AMD64=ghcr.io/qu-jieniu/rit-in-wine/rit-payload:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        software-properties-common ca-certificates && \
+    add-apt-repository -y ppa:fex-emu/fex && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        fex-emu-armv8.0 bubblewrap && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# The amd64 Wine/RIT userspace becomes FEX's x86 RootFS (the proven green-CI layout).
+COPY --from=ghcr.io/qu-jieniu/rit-in-wine/rit-payload:latest / /opt/fex-rootfs/
+
+# FEX config: use the bundled RootFS by absolute path.
+RUN mkdir -p /etc/fex-emu && \
+    printf '{"Config":{"RootFS":"/opt/fex-rootfs"}}\n' > /etc/fex-emu/Config.json

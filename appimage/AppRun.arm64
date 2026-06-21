@@ -1,0 +1,44 @@
+#!/bin/bash
+# RIT-aarch64.AppImage — runs the x86 RIT on arm64 Linux, Rosetta-free, via FEX.
+#
+# Bundles an arm64 userspace (Ubuntu + FEX + bubblewrap) with the amd64 Wine/RIT as
+# FEX's x86 RootFS. bwrap (from the rootfs's real loader, like the x86_64 AppRun)
+# maps the arm64 rootfs as / and binds the host X socket; inside, FEXBash runs the
+# x86 Wine which runs RIT. Display is the host's native X/XWayland.
+#
+# NOTE: needs arm64-CI verification. The FEX-in-bwrap path may need the green-CI
+# host-passthrough workaround (Wine's case-insensitive NtCreateFile traversal can
+# fail on FEX RootFS dirs); validate-fex-arm64.yml is the reference recipe.
+set -u
+HERE="$(dirname "$(readlink -f "$0")")"
+R="$HERE/rootfs"
+
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}/RIT"
+PFX="$DATA/prefix"
+if [ ! -f "$PFX/.rit-ready" ]; then
+    echo "First run: setting up RIT (one-time)…" >&2
+    mkdir -p "$DATA"; rm -rf "$PFX"
+    cp -a "$R/opt/fex-rootfs/opt/rit-prefix" "$PFX"
+    touch "$PFX/.rit-ready"
+fi
+
+LD="$R/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+LP="$R/usr/lib/aarch64-linux-gnu:$R/lib/aarch64-linux-gnu:$R/lib"
+XAUTH="${XAUTHORITY:-$HOME/.Xauthority}"
+
+exec "$LD" --library-path "$LP" "$R/usr/bin/bwrap" \
+    --bind "$R" / \
+    --bind "$PFX" /opt/fex-rootfs/opt/rit-prefix \
+    --dev /dev --proc /proc --tmpfs /tmp --tmpfs /run --tmpfs /dev/shm \
+    --ro-bind-try /tmp/.X11-unix /tmp/.X11-unix \
+    --ro-bind-try "$XAUTH" /root/.Xauthority \
+    --ro-bind-try /etc/resolv.conf /etc/resolv.conf \
+    --setenv HOME /root \
+    --setenv DISPLAY "${DISPLAY:-:0}" \
+    --setenv XAUTHORITY /root/.Xauthority \
+    --setenv WINEPREFIX /opt/rit-prefix \
+    --setenv WINEARCH win32 \
+    --setenv WINEDEBUG -all \
+    --setenv WINEDLLOVERRIDES "mscoree=n;mshtml=d" \
+    --unshare-pid --die-with-parent \
+    /usr/bin/FEXBash -c 'wine "C:\\Program Files\\Rotman\\RIT User Application\\Client.exe"'

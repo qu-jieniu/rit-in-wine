@@ -9,17 +9,18 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${OUT:-$HERE/out}"
 ROOTFS_IMG="${ROOTFS_IMG:-rit-appimage-rootfs}"
+CRT="${CRT:-$(command -v docker || command -v podman)}"   # docker (CI) or podman (local)
 APPDIR="$(mktemp -d)/RIT.AppDir"
 mkdir -p "$APPDIR/rootfs" "$OUT"
 
-echo "==> build rootfs image (minimal payload + bubblewrap)"
-podman build -f "$HERE/Dockerfile.appimage" -t "$ROOTFS_IMG" "$HERE"
+echo "==> build rootfs image (minimal payload + bubblewrap) [$CRT]"
+"$CRT" build -f "$HERE/Dockerfile.appimage" -t "$ROOTFS_IMG" "$HERE"
 
 echo "==> export the rootfs"
-cid=$(podman create "$ROOTFS_IMG")
-podman export "$cid" | tar -C "$APPDIR/rootfs" -xf - \
+cid=$("$CRT" create "$ROOTFS_IMG")
+"$CRT" export "$cid" | tar -C "$APPDIR/rootfs" -xf - \
     --exclude='proc/*' --exclude='sys/*' --exclude='dev/*' 2>/dev/null || true
-podman rm "$cid" >/dev/null
+"$CRT" rm "$cid" >/dev/null
 # Existence only (wine is an absolute symlink into the rootfs — `test -x` would
 # wrongly resolve it against the host root and fail).
 test -e "$APPDIR/rootfs/usr/bin/bwrap"
