@@ -2,7 +2,7 @@
 # Build-time: install the pinned RIT MSI INTO the baked prefix, so the prefix
 # ships with RIT already present (for the AppImage / .pkg payload).
 set -eu
-VER="${RIT_VERSION:-1.8.420}"
+VER="${RIT_VERSION:-1.8.464}"
 export WINEPREFIX=/opt/rit-prefix WINEARCH=${WINEARCH:-win32} WINEDEBUG=-all
 export DISPLAY=:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
 mkdir -p /tmp/xdg

@@ -3,7 +3,7 @@
 # log, reports exactly what landed and where, then tries to launch + hit the API.
 set -u
 
-VER="${RIT_VERSION:-1.8.420}"
+VER="${RIT_VERSION:-1.8.464}"
 export WINEPREFIX=/opt/rit-prefix WINEARCH=${WINEARCH:-win64} WINEDEBUG=-all
 export DISPLAY=:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
 mkdir -p /tmp/xdg

@@ -10,7 +10,7 @@ on:
       version:
         description: "RIT version to test (e.g. 1.8.464)"
         required: true
-        default: "1.8.420"
+        default: "1.8.464"
 
 jobs:
   gate:
