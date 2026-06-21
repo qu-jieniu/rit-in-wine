@@ -29,7 +29,9 @@ pkill -f "Xvfb :99" 2>/dev/null || true
 pkill -f "x11vnc"   2>/dev/null || true
 Xvfb :99 -screen 0 1280x800x24 -listen tcp -ac >/tmp/xvfb.log 2>&1 &
 sleep 3
-x11vnc -display 127.0.0.1:99 -rfbport 5900 -forever -shared -nopw -quiet >/tmp/x11vnc.log 2>&1 &
+# -noshm is required: the display is reached over TCP (127.0.0.1:99), and MIT
+# shared-memory (XShmAttach) fails over TCP — without it x11vnc crashes on connect.
+x11vnc -display 127.0.0.1:99 -rfbport 5900 -forever -shared -nopw -noshm -quiet >/tmp/x11vnc.log 2>&1 &
 
 cat > "$HOME/.fex-emu/RootFS/rit/run.sh" <<'SH'
 set -u
