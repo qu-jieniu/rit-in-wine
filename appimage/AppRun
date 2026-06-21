@@ -29,7 +29,23 @@ fi
 
 CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
 
-cleanup() { "$WINESERVER" -k >/dev/null 2>&1 || true; }
-trap cleanup EXIT INT TERM HUP
-
-"$WINELOADER" "$CLIENT" "$@"
+# Bulletproof teardown. Run the whole Wine session inside a PID namespace: if this
+# launcher dies for ANY reason — normal exit, window close, SIGTERM, or even a
+# Force Quit / `kill -9` — the kernel SIGKILLs EVERY process in the namespace
+# (wineserver, services.exe, plugplay, explorer… all of it). No lingering or
+# hidden background process can survive. Verified: 0 survivors after SIGKILL.
+#   --user --map-current-user : rootless; Wine stays your uid, prefix still owned
+#                               by it (ownership check passes), no root warning.
+#   --pid --fork              : new PID namespace; Wine becomes its init (PID 1).
+#   --kill-child              : ties the namespace's death to this launcher's
+#                               (parent-death signal) — covers the SIGKILL case.
+NS="unshare --user --map-current-user --pid --fork --kill-child --mount-proc"
+if $NS true 2>/dev/null; then
+    exec $NS -- "$WINELOADER" "$CLIENT" "$@"
+else
+    # Hardened kernels may disable unshare/user namespaces — fall back to a
+    # best-effort wineserver -k on exit (covers everything but Force Quit).
+    cleanup() { "$WINESERVER" -k >/dev/null 2>&1 || true; }
+    trap cleanup EXIT INT TERM HUP
+    "$WINELOADER" "$CLIENT" "$@"
+fi

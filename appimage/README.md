@@ -6,8 +6,13 @@ Self-contained `RIT.AppImage` = bundled Wine + the RIT-baked win32 prefix + an
 ## Status
 
 - ✅ Builds: `RIT-x86_64.AppImage`, ~369 MB (under the 500 MB target).
-- ✅ Wine boots and RIT starts; prefix expands to `~/.local/share/RIT` on first
-  run; clean teardown on exit.
+- ✅ Wine boots and RIT starts; prefix expands to `~/.local/share/RIT` on first run.
+- ✅ **Bulletproof teardown** — the Wine session runs inside a rootless PID
+  namespace (`unshare --user --map-current-user --pid --fork --kill-child`). If the
+  launcher dies for *any* reason (window close, `kill`, or **Force Quit /
+  `kill -9`**), the kernel SIGKILLs every process in the namespace — wineserver,
+  services.exe, all of it. Verified: 0 survivors after a SIGKILL. Falls back to a
+  `wineserver -k` exit trap if a hardened kernel disables user namespaces.
 - ⚠️ On a *pristine* 64-bit-only host the bundled Wine doesn't yet relocate its
   unix X11 driver / resolve every `dlopen`'d 32-bit lib. RIT is 32-bit, so the
   host also needs `libc6:i386` / `glibc.i686`.
