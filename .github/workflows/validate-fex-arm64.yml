@@ -67,7 +67,13 @@ jobs:
           CX="/opt/rootfs/opt/rit-prefix/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
           test -f "$CX" && echo "HOST: Client.exe present ($(stat -c%s "$CX") bytes)" || echo "HOST: Client.exe MISSING"
           test -f /opt/rootfs/opt/rit-prefix/system.reg && echo "HOST: system.reg present" || echo "HOST: system.reg MISSING"
-          # point FEX at this rootfs
+          # A Wine prefix must be WRITABLE; FEX serves rootfs paths read-only.
+          # Move the prefix OUT of the rootfs to a host path (not present in the
+          # image) so FEX falls through to the writable host copy.
+          sudo mv /opt/rootfs/opt/rit-prefix /rit-prefix
+          sudo chown -R "$(id -u):$(id -g)" /rit-prefix
+          echo "HOST: prefix moved to /rit-prefix (writable, outside rootfs)"
+          # point FEX at this rootfs (system + wine binaries, read-only)
           mkdir -p ~/.fex-emu
           printf '{"Config":{"RootFS":"/opt/rootfs"},"ThunksDB":{}}\n' > ~/.fex-emu/Config.json
           ls /opt/rootfs/opt/wine-stable/bin/wine && echo "rootfs has wine"
@@ -77,14 +83,15 @@ jobs:
           export FEX_ROOTFS=/opt/rootfs
           cat > /tmp/run.sh <<'SH'
           set -u
-          export WINEPREFIX=/opt/rit-prefix WINEARCH=win32 WINEDEBUG=-all
+          export WINEPREFIX=/rit-prefix WINEARCH=win32 WINEDEBUG=-all
           export WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
           mkdir -p /tmp/xdg
           Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 & sleep 3
           CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
-          echo "== GUEST diagnostics: what does FEX show the guest at the prefix path? =="
-          echo "guest ls /opt/rit-prefix:"; ls /opt/rit-prefix 2>&1 | head
+          echo "== GUEST diagnostics: FEX path resolution =="
+          echo "guest ls /rit-prefix (host passthrough, should show drive_c):"; ls /rit-prefix 2>&1 | head
           echo "guest Client.exe:"; ls -la "$CLIENT" 2>&1 | head -1
+          echo "guest can WRITE to prefix?:"; touch /rit-prefix/.fexwrite 2>&1 && echo "  writable" || echo "  NOT writable"
           echo "guest /tmp passthrough probe:"; echo hi > /tmp/fexprobe 2>&1 && cat /tmp/fexprobe
           echo "== launching RIT under FEX (slow; .NET JIT-on-JIT) =="
           wine "$CLIENT" >/tmp/rit.log 2>&1 &
