@@ -59,6 +59,9 @@ jobs:
           sudo mkdir -p /opt/rootfs
           docker export "$cid" | sudo tar -C /opt/rootfs -xf -
           docker rm "$cid"
+          # Wine refuses a prefix not owned by the current user; the export is
+          # root-owned, so hand the rootfs to the runner user.
+          sudo chown -R "$(id -u):$(id -g)" /opt/rootfs
           # point FEX at this rootfs
           mkdir -p ~/.fex-emu
           printf '{"Config":{"RootFS":"/opt/rootfs"},"ThunksDB":{}}\n' > ~/.fex-emu/Config.json
