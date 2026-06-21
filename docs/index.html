@@ -21,8 +21,7 @@
   a.btn { display:inline-block; background:var(--accent); color:#fff; text-decoration:none;
           padding:13px 26px; border-radius:12px; font-weight:600; }
   a.btn.alt { background:transparent; border:1px solid #39427a; color:var(--fg); padding:8px 16px; font-weight:500; font-size:14px; }
-  .cards { display:grid; gap:16px; grid-template-columns:1fr; }
-  @media(min-width:680px){ .cards{ grid-template-columns:1fr 1fr 1fr; } }
+  .cards { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); }
   .card { background:var(--card); border:1px solid #2a3157; border-radius:14px; padding:18px; }
   .card.hl { border-color:var(--accent); box-shadow:0 0 0 2px rgba(91,140,255,.25); }
   .card h3 { margin:0 0 4px; font-size:17px; }
@@ -45,6 +44,9 @@
     <div class="sub">Run RIT and its local REST API on Mac &amp; Linux.</div>
   </header>
 
+  <div id="warn" style="display:none; background:#3a2417; border:1px solid #d1742f;
+       color:#ffd9b0; border-radius:12px; padding:14px 18px; margin:0 0 20px; text-align:center;"></div>
+
   <div class="pick" id="pick">
     <div class="label">Detected system</div>
     <div class="what" id="whatText">Detecting…</div>
@@ -53,19 +55,24 @@
   </div>
 
   <div class="cards">
-    <div class="card" id="card-linux">
-      <h3>Linux</h3>
-      <div class="eng">AppImage · stock Wine 11 · no Rosetta</div>
-      <a class="btn" href="https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-x86_64.AppImage">Download AppImage</a>
+    <div class="card" id="card-linux-x64">
+      <h3>Linux · Intel/AMD</h3>
+      <div class="eng">AppImage · stock Wine 11 · native x86</div>
+      <a class="btn" href="https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-x86_64.AppImage">Download (x86_64)</a>
+    </div>
+    <div class="card" id="card-linux-arm">
+      <h3>Linux · ARM64</h3>
+      <div class="eng">AppImage · stock Wine 11 + FEX</div>
+      <a class="btn" href="https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-aarch64.AppImage">Download (arm64)</a>
     </div>
     <div class="card" id="card-intel">
       <h3>Intel Mac</h3>
-      <div class="eng">.pkg · stock Wine 11 · native x86, no Rosetta</div>
+      <div class="eng">.pkg · stock Wine 11 · native x86 · macOS 11+</div>
       <a class="btn" href="https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-intel.pkg">Download for Intel</a>
     </div>
     <div class="card" id="card-arm">
       <h3>Apple Silicon</h3>
-      <div class="eng">.pkg · stock Wine 11 + FEX · Rosetta-free</div>
+      <div class="eng">.pkg · stock Wine 11 + FEX · Rosetta-free · <b>macOS 14+</b></div>
       <a class="btn" href="https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-apple-silicon.pkg">Download for Apple Silicon</a>
     </div>
   </div>
@@ -84,15 +91,19 @@
 
 <script>
 const DL = {
-  linux: "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-x86_64.AppImage",
-  intel: "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-intel.pkg",
-  arm:   "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-apple-silicon.pkg"
+  linux_x64: "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-x86_64.AppImage",
+  linux_arm: "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-aarch64.AppImage",
+  intel:     "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-intel.pkg",
+  arm:       "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-apple-silicon.pkg"
 };
 function detect() {
   const ua = navigator.userAgent;
   if (/Windows/i.test(ua)) return {os:"windows"};
   if (/Android/i.test(ua)) return {os:"other"};
-  if (/Linux|X11/i.test(ua)) return {os:"linux"};
+  if (/Linux|X11/i.test(ua)) {
+    const arch = /aarch64|arm64|armv8|aarch/i.test(ua) ? "arm" : "x64";  // best-effort
+    return {os:"linux", arch};
+  }
   if (/Mac/i.test(ua)) {
     let arch = "unknown";
     try {
@@ -111,9 +122,14 @@ const what = document.getElementById("whatText");
 const btn = document.getElementById("mainBtn");
 const help = document.getElementById("helpText");
 function hl(id){ const c=document.getElementById(id); if(c) c.classList.add("hl"); }
-if (d.os === "linux") {
-  what.innerHTML = 'Linux <span class="badge">recommended</span>';
-  btn.href = DL.linux; btn.textContent = "Download RIT.AppImage"; hl("card-linux");
+if (d.os === "linux" && d.arch === "arm") {
+  what.innerHTML = 'Linux ARM64 <span class="badge">recommended</span>';
+  btn.href = DL.linux_arm; btn.textContent = "Download RIT.AppImage (arm64)"; hl("card-linux-arm");
+} else if (d.os === "linux") {
+  what.innerHTML = 'Linux (Intel/AMD) <span class="badge">recommended</span>';
+  btn.href = DL.linux_x64; btn.textContent = "Download RIT.AppImage (x86_64)";
+  help.innerHTML = 'On an ARM machine? <a class="btn alt" href="'+DL.linux_arm+'">Get the arm64 build</a>';
+  hl("card-linux-x64");
 } else if (d.os === "mac" && d.arch === "arm") {
   what.innerHTML = 'Apple Silicon Mac <span class="badge">recommended</span>';
   btn.href = DL.arm; btn.textContent = "Download for Apple Silicon"; hl("card-arm");
@@ -132,6 +148,27 @@ if (d.os === "linux") {
 } else {
   what.textContent = "Choose your platform below";
   btn.style.display = "none";
+}
+
+// macOS version floor: Apple Silicon (v2/libkrun) needs 14+, Intel needs 11+.
+// Browsers freeze the macOS version in the UA string (Safari -> "10.15.7"), so we
+// ONLY warn when userAgentData (Chromium) gives the real version — no false alarms.
+const FLOOR = { arm: 14, intel: 11 };
+if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+  navigator.userAgentData.getHighEntropyValues(["architecture","platformVersion","platform"])
+    .then(h => {
+      if (h.platform !== "macOS") return;
+      const arch = h.architecture === "arm" ? "arm" : "intel";
+      const major = parseInt((h.platformVersion||"").split(".")[0], 10);
+      const floor = FLOOR[arch];
+      if (major && major < floor) {
+        const w = document.getElementById("warn");
+        w.style.display = "block";
+        w.innerHTML = "⚠️ Your Mac is on <b>macOS " + major + "</b>. The " +
+          (arch==="arm" ? "Apple Silicon" : "Intel") + " build needs <b>macOS " +
+          floor + " or later</b> — please update macOS first (Apple menu → System Settings → General → Software Update).";
+      }
+    }).catch(()=>{});
 }
 </script>
 </body>
