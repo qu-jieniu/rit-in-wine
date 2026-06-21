@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rotman Interactive Trader — Download</title>
+<style>
+  :root { --bg:#0f1220; --card:#1a1f35; --fg:#e8ebf5; --muted:#9aa3c0; --accent:#5b8cff; --ok:#33d17a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+         background:linear-gradient(180deg,#0f1220,#141833); color:var(--fg); }
+  .wrap { max-width:880px; margin:0 auto; padding:48px 20px 80px; }
+  header { text-align:center; margin-bottom:32px; }
+  header img { width:88px; height:88px; border-radius:20px; }
+  h1 { margin:14px 0 4px; font-size:30px; }
+  .sub { color:var(--muted); }
+  .pick { background:var(--card); border:1px solid #2a3157; border-radius:16px;
+          padding:22px; text-align:center; margin:24px 0 36px; }
+  .pick .label { color:var(--muted); font-size:14px; }
+  .pick .what { font-size:20px; font-weight:600; margin:6px 0 16px; }
+  a.btn { display:inline-block; background:var(--accent); color:#fff; text-decoration:none;
+          padding:13px 26px; border-radius:12px; font-weight:600; }
+  a.btn.alt { background:transparent; border:1px solid #39427a; color:var(--fg); padding:8px 16px; font-weight:500; font-size:14px; }
+  .cards { display:grid; gap:16px; grid-template-columns:1fr; }
+  @media(min-width:680px){ .cards{ grid-template-columns:1fr 1fr 1fr; } }
+  .card { background:var(--card); border:1px solid #2a3157; border-radius:14px; padding:18px; }
+  .card.hl { border-color:var(--accent); box-shadow:0 0 0 2px rgba(91,140,255,.25); }
+  .card h3 { margin:0 0 4px; font-size:17px; }
+  .card .eng { color:var(--muted); font-size:13px; margin-bottom:14px; min-height:34px; }
+  .card a.btn { width:100%; padding:11px 0; font-size:15px; }
+  .badge { display:inline-block; font-size:11px; color:var(--ok); border:1px solid var(--ok);
+           border-radius:999px; padding:1px 9px; margin-left:8px; vertical-align:middle; }
+  details { margin-top:28px; color:var(--muted); }
+  details summary { cursor:pointer; }
+  code { background:#0c0f1d; padding:2px 6px; border-radius:6px; }
+  .foot { text-align:center; color:var(--muted); font-size:13px; margin-top:40px; }
+  .help { color:var(--muted); font-size:13px; margin-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="rit-icon.png" alt="RIT">
+    <h1>Rotman Interactive Trader</h1>
+    <div class="sub">Run RIT and its local REST API on Mac &amp; Linux.</div>
+  </header>
+
+  <div class="pick" id="pick">
+    <div class="label">Detected system</div>
+    <div class="what" id="whatText">Detecting…</div>
+    <a class="btn" id="mainBtn" href="#">Download</a>
+    <div class="help" id="helpText"></div>
+  </div>
+
+  <div class="cards">
+    <div class="card" id="card-linux">
+      <h3>Linux</h3>
+      <div class="eng">AppImage · stock Wine 11 · no Rosetta</div>
+      <a class="btn" href="https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-x86_64.AppImage">Download AppImage</a>
+    </div>
+    <div class="card" id="card-intel">
+      <h3>Intel Mac</h3>
+      <div class="eng">.pkg · stock Wine 11 · native x86, no Rosetta</div>
+      <a class="btn" href="https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-intel.pkg">Download for Intel</a>
+    </div>
+    <div class="card" id="card-arm">
+      <h3>Apple Silicon</h3>
+      <div class="eng">.pkg · stock Wine 11 + FEX · Rosetta-free</div>
+      <a class="btn" href="https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-apple-silicon.pkg">Download for Apple Silicon</a>
+    </div>
+  </div>
+
+  <details>
+    <summary>Not sure which Mac you have?</summary>
+    <p>Apple menu → <b>About This Mac</b>. If it says <b>“Apple M1/M2/M3/M4…”</b> choose
+    <b>Apple Silicon</b>; if it says <b>“Intel”</b> choose <b>Intel Mac</b>.</p>
+    <p>After downloading the API is live at <code>http://localhost:9999/v1/…</code> for your
+    Python/R scripts — same as native RIT.</p>
+  </details>
+
+  <div class="foot">On Windows? RIT runs natively — get it from
+    <a href="https://rit.306w.ca" style="color:var(--accent)">Rotman</a>.</div>
+</div>
+
+<script>
+const DL = {
+  linux: "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-x86_64.AppImage",
+  intel: "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-intel.pkg",
+  arm:   "https://github.com/qu-jieniu/rit-in-wine/releases/latest/download/RIT-mac-apple-silicon.pkg"
+};
+function detect() {
+  const ua = navigator.userAgent;
+  if (/Windows/i.test(ua)) return {os:"windows"};
+  if (/Android/i.test(ua)) return {os:"other"};
+  if (/Linux|X11/i.test(ua)) return {os:"linux"};
+  if (/Mac/i.test(ua)) {
+    let arch = "unknown";
+    try {
+      const gl = document.createElement("canvas").getContext("webgl");
+      const dbg = gl && gl.getExtension("WEBGL_debug_renderer_info");
+      const r = dbg ? (gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)||"") : "";
+      if (/apple/i.test(r) && !/intel/i.test(r)) arch = "arm";
+      else if (/intel|amd|radeon/i.test(r)) arch = "intel";
+    } catch(e) {}
+    return {os:"mac", arch};
+  }
+  return {os:"other"};
+}
+const d = detect();
+const what = document.getElementById("whatText");
+const btn = document.getElementById("mainBtn");
+const help = document.getElementById("helpText");
+function hl(id){ const c=document.getElementById(id); if(c) c.classList.add("hl"); }
+if (d.os === "linux") {
+  what.innerHTML = 'Linux <span class="badge">recommended</span>';
+  btn.href = DL.linux; btn.textContent = "Download RIT.AppImage"; hl("card-linux");
+} else if (d.os === "mac" && d.arch === "arm") {
+  what.innerHTML = 'Apple Silicon Mac <span class="badge">recommended</span>';
+  btn.href = DL.arm; btn.textContent = "Download for Apple Silicon"; hl("card-arm");
+} else if (d.os === "mac" && d.arch === "intel") {
+  what.innerHTML = 'Intel Mac <span class="badge">recommended</span>';
+  btn.href = DL.intel; btn.textContent = "Download for Intel Mac"; hl("card-intel");
+} else if (d.os === "mac") {
+  // Mac but arch uncertain — default to Apple Silicon (most common), show both
+  what.textContent = "Mac — pick your chip below";
+  btn.href = DL.arm; btn.textContent = "Download for Apple Silicon";
+  help.innerHTML = 'Not Apple Silicon? <a class="btn alt" href="'+DL.intel+'">Get the Intel build</a>';
+  hl("card-arm"); hl("card-intel");
+} else if (d.os === "windows") {
+  what.textContent = "Windows — RIT runs natively";
+  btn.href = "https://rit.306w.ca"; btn.textContent = "Get RIT from Rotman";
+} else {
+  what.textContent = "Choose your platform below";
+  btn.style.display = "none";
+}
+</script>
+</body>
+</html>
