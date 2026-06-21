@@ -84,6 +84,12 @@ jobs:
           head -c 40 /opt/wine-stable/share/wine/wine.inf >/dev/null 2>&1 && echo "  wine.inf READABLE" || echo "  wine.inf NOT readable"
           ls /opt/wine-stable/lib/wine/i386-unix/winex11.so >/dev/null 2>&1 && echo "  winex11.so present" || echo "  winex11.so MISSING"
           ls /opt/rit-prefix/drive_c >/dev/null 2>&1 && echo "  prefix readable" || echo "  prefix NOT readable"
+          echo "== explicit wineboot -u with file trace (find the real missing path) =="
+          WINEDEBUG=+file timeout 120 wine wineboot -u >/tmp/wineboot.log 2>&1; echo "  wineboot rc=$?"
+          grep -iE "wine.inf|No such|cannot open|Z:|update" /tmp/wineboot.log | tail -12
+          echo "== fonts present? =="
+          ls "$WINEPREFIX/drive_c/windows/Fonts" 2>&1 | head -3
+          ls /opt/wine-stable/share/wine/fonts 2>&1 | head -3
           echo "== launching RIT under FEX (slow; .NET JIT-on-JIT) =="
           wine "$CLIENT" >/tmp/rit.log 2>&1 &
           ok=0
