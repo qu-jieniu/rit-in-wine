@@ -1,5 +1,11 @@
 # Download landing page (GitHub Pages)
 
+Styled like a **Quarto** site — Bootstrap 5 + the `cosmo` Bootswatch theme (the
+same stack Quarto's default HTML output uses), loaded from CDN so it deploys on
+`/docs` with no build step. (Quarto itself isn't required; if you'd rather author
+it as a real `index.qmd` and render with `quarto render`, the markup ports over
+directly — ask and I'll generate the `.qmd` + a render workflow.)
+
 `index.html` detects the visitor's OS + Mac chip and offers the right build:
 
 | Detected | Offers | Release asset |
