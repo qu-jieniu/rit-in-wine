@@ -45,11 +45,11 @@ jobs:
     needs: bake-prefix
     runs-on: ubuntu-24.04-arm
     steps:
-      - name: Install FEX-Emu
+      - name: Install FEX-Emu + a native (arm64) Xvfb
         run: |
           sudo add-apt-repository -y ppa:fex-emu/fex
           sudo apt-get update
-          sudo apt-get install -y fex-emu-armv8.0
+          sudo apt-get install -y fex-emu-armv8.0 xvfb x11-utils
 
       - name: Export the x86 image as a FEX RootFS (canonical location)
         run: |
@@ -78,13 +78,17 @@ jobs:
 
       - name: Run RIT under FEX (FEXBash) and assert the API responds
         run: |
+          # Native arm64 Xvfb on the host, listening on TCP so the FEX guest can
+          # reach it (the x86 Xvfb wouldn't start under FEX). -ac = no access control.
+          Xvfb :99 -screen 0 1280x800x24 -listen tcp -ac >/tmp/xvfb.log 2>&1 &
+          sleep 3
+          pgrep -a Xvfb && echo "host Xvfb up" || { echo "host Xvfb failed"; cat /tmp/xvfb.log; exit 1; }
           cat > /tmp/run.sh <<'SH'
           set -u
           export WINEPREFIX=/opt/rit-prefix WINEARCH=win32 WINEDEBUG=-all
-          export WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
+          export WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=127.0.0.1:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
           export WINELOADER=/opt/wine-stable/bin/wine PATH=/opt/wine-stable/bin:/usr/bin:/bin
           mkdir -p /tmp/xdg
-          Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 & sleep 3
           CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
           echo "== guest can now read rootfs files? =="
           head -c 40 /opt/wine-stable/share/wine/wine.inf >/dev/null 2>&1 && echo "  wine.inf READABLE" || echo "  wine.inf NOT readable"
