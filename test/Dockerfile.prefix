@@ -1,0 +1,30 @@
+# A Wine 11 image with .NET 4.8 baked into /opt/rit-prefix.
+# Reusable base for installing/launching RIT without re-running dotnet48.
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN dpkg --add-architecture i386 && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates wget curl gnupg2 \
+        xvfb winbind cabextract winetricks p7zip-full \
+        iproute2 procps && \
+    mkdir -pm755 /etc/apt/keyrings && \
+    wget -qO /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
+    wget -qNP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources && \
+    apt-get update && \
+    apt-get install -y --install-recommends winehq-stable && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# win64 (default) or win32. RIT is 32-bit i386, so win32 drops the dead 64-bit
+# Wine DLL set. Placed here so the apt/winehq layers stay cached across arches.
+ARG WINEARCH=win64
+ENV WINEARCH=${WINEARCH}
+
+COPY bake-prefix.sh /test/bake-prefix.sh
+RUN chmod +x /test/bake-prefix.sh && /test/bake-prefix.sh
+
+ENV WINEPREFIX=/opt/rit-prefix
+COPY rit-install-test.sh /test/rit-install-test.sh
+RUN chmod +x /test/rit-install-test.sh
+ENTRYPOINT ["/test/rit-install-test.sh"]

@@ -1,0 +1,8 @@
+# Stripped variant of the baked dotnet48 prefix. Same entrypoint, so we can
+# re-run the full RIT install+launch+API test on the slimmed prefix to prove it
+# still works.
+ARG BASE=rit-prefix:dotnet48
+FROM ${BASE}
+ENV WINEPREFIX=/opt/rit-prefix
+COPY strip-prefix.sh /test/strip-prefix.sh
+RUN chmod +x /test/strip-prefix.sh && /test/strip-prefix.sh
