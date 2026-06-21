@@ -1,26 +1,24 @@
-// RIT.app (MVP) — embeds the RIT GUI in a native macOS window via RoyalVNC.
-// Connects to the FEX/Wine RIT running in the Lima VM (forwarded to localhost:5900).
-// This is the MVP display layer; VM orchestration + raw-VZ come next.
+// RIT.app (MVP) — embeds the RIT GUI in a native macOS window via RoyalVNC, with
+// full mouse/keyboard input (RoyalVNC's VNCCAFramebufferView handles rendering +
+// input + scaling). Connects to the FEX/Wine RIT in the VM on localhost:5900.
 import AppKit
 import RoyalVNCKit
 
 let VNC_HOST = ProcessInfo.processInfo.environment["RIT_VNC_HOST"] ?? "127.0.0.1"
-let VNC_PORT = Int(ProcessInfo.processInfo.environment["RIT_VNC_PORT"] ?? "5900") ?? 5900
+let VNC_PORT = UInt16(ProcessInfo.processInfo.environment["RIT_VNC_PORT"] ?? "5900") ?? 5900
 let VNC_PASS = ProcessInfo.processInfo.environment["RIT_VNC_PASS"] ?? "ritvnc"
 
 final class RITController: NSObject, VNCConnectionDelegate {
     let window: NSWindow
-    let imageView = NSImageView()
     var connection: VNCConnection?
+    var fbView: VNCCAFramebufferView?
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         window.title = "Rotman Interactive Trader — connecting…"
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.imageAlignment = .alignCenter
-        window.contentView = imageView
+        window.contentView = NSView()   // placeholder until the framebuffer arrives
         super.init()
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -30,12 +28,12 @@ final class RITController: NSObject, VNCConnectionDelegate {
         let settings = VNCConnection.Settings(
             isDebugLoggingEnabled: false,
             hostname: VNC_HOST,
-            port: UInt16(VNC_PORT),
+            port: VNC_PORT,
             isShared: true,
             isScalingEnabled: true,
-            useDisplayLink: false,
+            useDisplayLink: true,
             inputMode: .forwardKeyboardShortcutsIfNotInUseLocally,
-            isClipboardRedirectionEnabled: false,
+            isClipboardRedirectionEnabled: true,
             colorDepth: .depth24Bit,
             frameEncodings: .default
         )
@@ -47,7 +45,6 @@ final class RITController: NSObject, VNCConnectionDelegate {
 
     // MARK: VNCConnectionDelegate
     func connection(_ c: VNCConnection, stateDidChange state: VNCConnection.ConnectionState) {
-        // Delegate callbacks arrive on a background queue — all AppKit UI must be main-thread.
         let title: String?
         switch state.status {
         case .connected:    title = "Rotman Interactive Trader"
@@ -68,17 +65,25 @@ final class RITController: NSObject, VNCConnectionDelegate {
         }
     }
 
-    func connection(_ c: VNCConnection, didCreateFramebuffer fb: VNCFramebuffer) { render(fb) }
-    func connection(_ c: VNCConnection, didResizeFramebuffer fb: VNCFramebuffer) { render(fb) }
-    func connection(_ c: VNCConnection, didUpdateFramebuffer fb: VNCFramebuffer,
-                    x: UInt16, y: UInt16, width: UInt16, height: UInt16) { render(fb) }
-    func connection(_ c: VNCConnection, didUpdateCursor cursor: VNCCursor) {}
-
-    private func render(_ fb: VNCFramebuffer) {
-        guard let cg = fb.cgImage else { return }
-        let img = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
-        DispatchQueue.main.async { self.imageView.image = img }
+    func connection(_ c: VNCConnection, didCreateFramebuffer fb: VNCFramebuffer) {
+        DispatchQueue.main.async {
+            // The view takes over as the connection's delegate, handling framebuffer
+            // updates + mouse/keyboard, and forwards state/credential back to us.
+            let v = VNCCAFramebufferView(frame: self.window.contentView!.bounds,
+                                         framebuffer: fb, connection: c, connectionDelegate: self)
+            v.autoresizingMask = [.width, .height]
+            self.window.contentView = v
+            self.fbView = v
+            self.window.makeFirstResponder(v)
+        }
     }
+
+    // After the view is created it becomes the delegate, so these won't fire on us;
+    // they exist to satisfy the protocol before the framebuffer arrives.
+    func connection(_ c: VNCConnection, didResizeFramebuffer fb: VNCFramebuffer) {}
+    func connection(_ c: VNCConnection, didUpdateFramebuffer fb: VNCFramebuffer,
+                    x: UInt16, y: UInt16, width: UInt16, height: UInt16) {}
+    func connection(_ c: VNCConnection, didUpdateCursor cursor: VNCCursor) {}
 }
 
 let app = NSApplication.shared
