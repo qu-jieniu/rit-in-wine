@@ -53,3 +53,9 @@ rit-autotype
 # v2 libkrun build artifacts
 v2/libkrun/rootfs/
 v2/libkrun/rit-vm
+
+# RIT server: proprietary MSI + extracted/decompiled payload (analysis only)
+server/in/
+server/files/
+server/extracted/
+server/decompiled/
