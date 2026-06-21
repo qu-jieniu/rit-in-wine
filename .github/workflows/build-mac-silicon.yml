@@ -21,9 +21,15 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15          # Xcode 16 / Swift 6 by default (RoyalVNC needs Swift 6.0)
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select latest Xcode (Swift 6)
+        run: |
+          latest=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$latest" ] && sudo xcode-select -s "$latest/Contents/Developer" || true
+          swift --version
 
       - name: Build RIT.app (Swift + RoyalVNC -> bundle)
         env:
