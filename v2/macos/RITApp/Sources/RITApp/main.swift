@@ -47,11 +47,14 @@ final class RITController: NSObject, VNCConnectionDelegate {
 
     // MARK: VNCConnectionDelegate
     func connection(_ c: VNCConnection, stateDidChange state: VNCConnection.ConnectionState) {
+        // Delegate callbacks arrive on a background queue — all AppKit UI must be main-thread.
+        let title: String?
         switch state.status {
-        case .connected:    window.title = "Rotman Interactive Trader"
-        case .disconnected: window.title = "Rotman Interactive Trader — disconnected"
-        default: break
+        case .connected:    title = "Rotman Interactive Trader"
+        case .disconnected: title = "Rotman Interactive Trader — disconnected"
+        default:            title = nil
         }
+        if let title { DispatchQueue.main.async { self.window.title = title } }
     }
 
     func connection(_ c: VNCConnection, credentialFor authType: VNCAuthenticationType,
