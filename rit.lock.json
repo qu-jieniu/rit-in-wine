@@ -1,0 +1,9 @@
+{
+  "version": "1.8.420",
+  "url": "https://rit.306w.ca/release/1.8.420/RIT%20User%20Application-1.8.420.msi",
+  "msi_sha256": "7d1c8d541a22a2e3e627a95f5ab093442771e0077a6bb5bf1a7af51d535e5834",
+  "msi_size": 9027584,
+  "wine_branch": "winehq-stable",
+  "wine_arch": "win32",
+  "_note": "Single source of truth for the pinned RIT build. version + sha256 pin the exact bytes; the gate workflow, Mac .pkg, and Linux AppImage all read from here. Bump only after the pre-release gate passes for a new version."
+}

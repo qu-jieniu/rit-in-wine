@@ -12,9 +12,14 @@ sleep 2
 
 echo "== wine $(wine --version), .NET 4.8 prebaked =="
 
-echo "== fetch MSI $VER =="
-curl -fSL --retry 3 "https://rit.306w.ca/release/${VER}/RIT%20User%20Application-${VER}.msi" -o /tmp/rit.msi \
-    || { echo "VERDICT: MSI download failed"; exit 4; }
+if [[ -f /test/rit.msi ]]; then
+    echo "== using provided MSI (/test/rit.msi) =="
+    cp /test/rit.msi /tmp/rit.msi
+else
+    echo "== fetch MSI $VER =="
+    curl -fSL --retry 3 "https://rit.306w.ca/release/${VER}/RIT%20User%20Application-${VER}.msi" -o /tmp/rit.msi \
+        || { echo "VERDICT: MSI download failed"; exit 4; }
+fi
 
 echo "== msiexec /i /qn with verbose log =="
 wine msiexec /i /tmp/rit.msi /qn /l*v 'C:\install.log'
