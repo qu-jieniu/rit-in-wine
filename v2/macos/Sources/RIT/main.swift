@@ -37,8 +37,10 @@ final class RitVM {
             let c = UInt32(ctx)
             _ = krun_set_vm_config(c, 4, 4096)
             _ = rootPath.withCString { krun_set_root(c, $0) }   // virtiofs (container rootfs)
-            // expose VNC + API to the host loopback
-            withCStrings(["5900:5900", "9999:9999"]) { _ = krun_set_port_map(c, $0) }
+            // Expose to the Mac's real localhost:
+            //   9999 -> RIT REST API (students' Python/R hit http://localhost:9999 unchanged)
+            //   5900 -> VNC (the GUI)
+            withCStrings(["9999:9999", "5900:5900"]) { _ = krun_set_port_map(c, $0) }
             "/usr/local/bin/rit-desktop".withCString { exe in
                 withCStrings(["HOME=/root", "PATH=/usr/local/bin:/usr/bin:/bin"]) { env in
                     _ = krun_set_exec(c, exe, nil, env)
@@ -57,12 +59,23 @@ func withCStrings(_ strings: [String], _ body: (UnsafePointer<UnsafePointer<CCha
     for p in c where p != nil { free(p) }
 }
 
-// MARK: - VNC view (TODO: back with a Swift VNC client, e.g. RoyalVNC)
+// MARK: - GUI display. Two options; pick one.
+//
+// The API (localhost:9999) is forwarded regardless — students' Python/R work
+// unchanged. This is only about *showing RIT's window*.
+//
+// Option A (MVP, no dependency): macOS built-in Screen Sharing on :5900.
+func openGUIWithScreenSharing() {
+    // RIT's GUI opens in macOS's bundled VNC viewer — no VNC library needed.
+    if let url = URL(string: "vnc://localhost:5900") { NSWorkspace.shared.open(url) }
+}
+//
+// Option B (polish): embed the framebuffer in RIT.app's own window with a Swift
+// VNC client (e.g. RoyalVNC). RoyalVNC is OPTIONAL — only for the embedded look.
 struct VNCView: NSViewRepresentable {
     let host = "127.0.0.1"; let port = 5900
     func makeNSView(context: Context) -> NSView {
-        // TODO: create a VNC client connected to host:port and return its framebuffer view.
-        // RoyalVNC: VNCConnection(settings: .init(hostname: host, port: port, ...))
+        // TODO (optional): RoyalVNC VNCConnection(host:port) -> framebuffer view.
         let v = NSView(); v.wantsLayer = true; v.layer?.backgroundColor = .black
         return v
     }

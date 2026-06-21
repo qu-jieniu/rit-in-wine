@@ -28,7 +28,7 @@ Done (proven elsewhere in this repo):
 - entitlements (`RIT.entitlements`) — hypervisor + JIT for FEX
 
 TODO (Mac-side, marked in `main.swift`):
-1. **VNC client** — back `VNCView` with a Swift VNC library (e.g. RoyalVNC) on :5900.
+1. **GUI display** — MVP: open macOS Screen Sharing (`vnc://localhost:5900`), no library. Polish: embed RoyalVNC (optional). The API (:9999) is forwarded regardless — Python/R hit localhost:9999 unchanged.
 2. **Payload packaging** — `PayloadSetup.ensureRootfs()`: ship the slimmed payload
    rootfs in `Resources/` (or pull on first run) and expand it once to
    `~/Library/Application Support/RIT/rootfs`.
