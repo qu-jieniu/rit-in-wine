@@ -66,6 +66,11 @@ jobs:
           # its bake path, as a host-passthrough copy.
           sudo mv ~/.fex-emu/RootFS/rit/opt/rit-prefix /opt/rit-prefix
           sudo chown -R "$(id -u):$(id -g)" /opt/rit-prefix
+          # Wine's case-insensitive NtCreateFile traversal fails on rootfs dirs
+          # under FEX (host-passthrough dirs work). Move the whole Wine install to
+          # a host-passthrough path so wine.inf + fonts resolve.
+          sudo mv ~/.fex-emu/RootFS/rit/opt/wine-stable /opt/wine-stable
+          sudo chown -R "$(id -u):$(id -g)" /opt/wine-stable
           # Canonical config: RootFS is the NAME (resolved under ~/.fex-emu/RootFS/),
           # not an absolute path (the bug last time).
           printf '{"Config":{"RootFS":"rit"}}\n' > ~/.fex-emu/Config.json
@@ -77,6 +82,7 @@ jobs:
           set -u
           export WINEPREFIX=/opt/rit-prefix WINEARCH=win32 WINEDEBUG=-all
           export WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
+          export WINELOADER=/opt/wine-stable/bin/wine PATH=/opt/wine-stable/bin:/usr/bin:/bin
           mkdir -p /tmp/xdg
           Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 & sleep 3
           CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
