@@ -40,13 +40,19 @@ jobs:
             RIT-mac-apple-silicon.dmg
           ls -la RIT-mac-apple-silicon.dmg
 
-      - name: Notarize + staple (only when signing identity + notary creds are set)
-        if: ${{ secrets.CODESIGN_IDENTITY != '' && secrets.NOTARY_PASSWORD != '' }}
+      - name: Notarize + staple (when signing creds are set)
+        env:
+          SIGN_ID: ${{ secrets.CODESIGN_IDENTITY }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
         run: |
+          if [ -z "$SIGN_ID" ] || [ -z "$NOTARY_PASSWORD" ]; then
+            echo "No signing/notary creds set — ad-hoc build, skipping notarization."; exit 0
+          fi
           xcrun notarytool submit RIT-mac-apple-silicon.dmg \
-            --apple-id "${{ secrets.NOTARY_APPLE_ID }}" \
-            --team-id "${{ secrets.NOTARY_TEAM_ID }}" \
-            --password "${{ secrets.NOTARY_PASSWORD }}" --wait
+            --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" \
+            --password "$NOTARY_PASSWORD" --wait
           xcrun stapler staple RIT-mac-apple-silicon.dmg
 
       - uses: actions/upload-artifact@v4
