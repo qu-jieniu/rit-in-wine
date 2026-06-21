@@ -10,6 +10,11 @@ name: Validate Rosetta-free arm64 (Wine + FEX)
 
 on:
   workflow_dispatch:
+  # Temporary: lets the run trigger from the feature branch before PR #1 merges
+  # (workflow_dispatch only registers from the default branch). Remove on merge.
+  push:
+    branches: [arm64-and-httpsys-tests]
+    paths: [.github/workflows/validate-fex-arm64.yml]
 
 jobs:
   bake-prefix:
