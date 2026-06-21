@@ -1,4 +1,13 @@
-# v2 launcher core — libkrun microVM
+# v2 launcher core — libkrun microVM  ⟶ PARKED (backup engine)
+
+> **Status: kept as a proven backup, not the primary path.** The Apple Silicon
+> `RIT.app` is built on **Apple's Virtualization.framework** instead — it's
+> built into macOS (no third-party dependency), Apple-maintained/durable, and
+> targets a lower floor (macOS 13 vs libkrun's ~14). This libkrun launcher is
+> retained because it's already proven on Linux and the architecture is identical
+> (microVM + FEX + payload + port-forward + in-process teardown); only the
+> VM-boot calls differ. Revive it if VZ ever falls short (e.g. boot-speed,
+> a cross-platform single binary, or a macOS regression).
 
 `rit-vm.c` is the portable core of the v2 launcher. The **same libkrun API calls
 compile on Linux (KVM) and macOS/Apple-Silicon (Hypervisor.framework)** — so this
