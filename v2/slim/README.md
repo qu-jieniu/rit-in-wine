@@ -5,13 +5,16 @@ The payload for the native `RIT.app`: stock Wine 11 + RIT, the **slimmest displa
 
 ## Size — verified
 
-| | compressed (zstd -19) |
+| Variant / compressor | Size |
 |---|---|
 | noVNC payload (`v2/Dockerfile.payload`) | ~1.3 GB |
-| **slim Xvnc + cruft strip (this)** | **881 MB** ✅ RIT verified (API + VNC) |
+| slim Xvnc + cruft strip, zstd -19 | 881 MB |
+| **slim + cruft strip, `zstd --ultra -22`** | **805 MB** ✅ |
+| (xz -9e — 775 MB, but slow to extract; not worth it) | 775 MB |
 
-That hits the ~700–900 MB target. RIT confirmed working after the strip: API binds
-`:9999` (~10 s) and Xvnc answers the `RFB 003.008` handshake on `:5900`.
+`zstd --ultra -22` is the pick: ~9% smaller than -19 and zstd decompresses just as
+fast at any level, so no first-run penalty. RIT confirmed working after the strip:
+API binds `:9999` (~10 s) and Xvnc answers the `RFB 003.008` handshake on `:5900`.
 
 ## What is / isn't strippable
 
@@ -31,7 +34,7 @@ risk, separate effort. 881 MB is a good landing point.
 ```bash
 podman build -f v2/slim/Dockerfile -t rit-v2-slim v2/slim      # FROM rit-prefix:installed
 # the shippable payload is the flattened, compressed rootfs:
-podman export $(podman create rit-v2-slim) | zstd -19 -T0 > rit-payload.tar.zst   # ~881 MB
+podman export $(podman create rit-v2-slim) | zstd --ultra -22 -T0 > rit-payload.tar.zst   # ~805 MB
 ```
 
 The macOS wrapper bundles (or first-run-downloads) `rit-payload.tar.zst`, expands
