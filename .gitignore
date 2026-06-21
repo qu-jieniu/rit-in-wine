@@ -49,3 +49,7 @@ rit-autotype
 
 # macOS junk
 .DS_Store
+
+# v2 libkrun build artifacts
+v2/libkrun/rootfs/
+v2/libkrun/rit-vm
