@@ -1,0 +1,40 @@
+# Lima VM to validate the Apple-Silicon path on a real Mac:
+#   arm64 Ubuntu (via Apple Virtualization.framework) + FEX + the RIT payload.
+# This is throwaway validation — NOT the shipped app. It boots the same VZ engine
+# the real RIT.app will use, so a green result here de-risks the whole approach.
+#
+#   brew install lima
+#   limactl start v2/macos/lima/rit.yaml
+#   limactl shell rit ./run-rit.sh        # (copy run-rit.sh in, or run from the mount)
+#   # on the Mac:  curl localhost:9999/v1/case   and   open vnc://localhost:5900
+
+vmType: "vz"                 # Apple Virtualization.framework (the engine we ship on)
+arch: "aarch64"
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+cpus: 4
+memory: "6GiB"
+disk: "30GiB"
+
+# Expose RIT's API + the VNC GUI to the Mac's localhost.
+portForwards:
+  - guestPort: 9999
+    hostIP: "127.0.0.1"
+  - guestPort: 5900
+    hostIP: "127.0.0.1"
+
+# Share this folder so run-rit.sh is available in the VM at /tmp/lima/...
+mounts:
+  - location: "~"
+    writable: false
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux
+      export DEBIAN_FRONTEND=noninteractive
+      add-apt-repository -y ppa:fex-emu/fex
+      apt-get update
+      apt-get install -y docker.io fex-emu-armv8.0 xvfb x11vnc x11-utils curl ca-certificates

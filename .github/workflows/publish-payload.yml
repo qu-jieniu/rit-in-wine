@@ -1,0 +1,34 @@
+name: Publish RIT payload (GHCR)
+
+# Builds the minimal amd64 RIT payload (debian-slim + stock Wine 11 + .NET 4.8 +
+# RIT) and pushes it to GHCR so the Apple-Silicon Lima validation (and later the
+# RIT.app build) can pull it. The payload is amd64 — FEX runs it on arm64.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMG: ghcr.io/qu-jieniu/rit-in-wine/rit-payload:latest
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build prefix pipeline (win32) + minimal payload
+        run: |
+          docker build -f test/Dockerfile.prefix    --build-arg WINEARCH=win32 -t p1 test
+          docker build -f test/Dockerfile.slim       --build-arg BASE=p1 -t p2 test
+          docker build -f test/Dockerfile.installed  --build-arg BASE=p2 -t rit-prefix:installed test
+          docker build -f v2/minimal/Dockerfile      --build-arg BASE=rit-prefix:installed -t "$IMG" v2/minimal
+      - name: Push
+        run: |
+          docker push "$IMG"
+          echo "Published $IMG"
+          echo "Make the package PUBLIC once (repo → Packages → rit-payload → Settings → Change visibility)"
