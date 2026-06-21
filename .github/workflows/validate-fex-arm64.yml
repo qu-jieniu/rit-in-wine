@@ -60,7 +60,9 @@ jobs:
           done
 
       - name: Sanity — run a stock amd64 image under FEX
-        run: docker run --rm --platform linux/amd64 ubuntu:24.04 bash -c 'echo "amd64 under FEX: $(uname -m)"; cat /etc/os-release | head -1'
+        run: |
+          docker run --rm --platform linux/amd64 ubuntu:24.04 \
+            bash -c 'echo "amd64 arch under FEX is $(uname -m)"; head -1 /etc/os-release'
 
       - name: Run RIT under FEX and assert the API responds
         run: |
