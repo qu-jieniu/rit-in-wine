@@ -1,0 +1,9 @@
+# Assembles RIT.AppImage from a prefix image that already has RIT installed.
+ARG BASE=rit-prefix:installed
+FROM ${BASE}
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        file curl ca-certificates zstd && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+COPY build-appimage.sh AppRun rit.desktop rit-icon.png /build/
+RUN chmod +x /build/build-appimage.sh
+ENTRYPOINT ["/build/build-appimage.sh"]

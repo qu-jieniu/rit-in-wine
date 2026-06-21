@@ -16,6 +16,11 @@ arm-build/out-*/
 wine-build/out/
 wine-build/out_min/
 gptk-build/out/
+appimage/out/
+
+# cached MSI fetched by the gate workflow / local tests
+test/rit.msi
+**/rit.msi
 
 # Local env (ship .env.example instead)
 .env

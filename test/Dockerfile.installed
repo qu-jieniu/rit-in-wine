@@ -1,0 +1,7 @@
+# Bakes the pinned RIT MSI into the stripped win32 prefix, so the prefix ships
+# with RIT already installed (AppImage / .pkg payload).
+ARG BASE=rit-prefix:slim-win32
+FROM ${BASE}
+ENV WINEPREFIX=/opt/rit-prefix WINEARCH=win32
+COPY bake-rit.sh /test/bake-rit.sh
+RUN chmod +x /test/bake-rit.sh && /test/bake-rit.sh
