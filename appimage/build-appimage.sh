@@ -20,8 +20,10 @@ cid=$(podman create "$ROOTFS_IMG")
 podman export "$cid" | tar -C "$APPDIR/rootfs" -xf - \
     --exclude='proc/*' --exclude='sys/*' --exclude='dev/*' 2>/dev/null || true
 podman rm "$cid" >/dev/null
-test -x "$APPDIR/rootfs/usr/bin/bwrap"
-test -x "$APPDIR/rootfs/usr/bin/wine"
+# Existence only (wine is an absolute symlink into the rootfs — `test -x` would
+# wrongly resolve it against the host root and fail).
+test -e "$APPDIR/rootfs/usr/bin/bwrap"
+test -e "$APPDIR/rootfs/usr/bin/wine"
 
 echo "==> AppRun + desktop + icon"
 cp "$HERE/AppRun" "$APPDIR/AppRun"; chmod +x "$APPDIR/AppRun"
