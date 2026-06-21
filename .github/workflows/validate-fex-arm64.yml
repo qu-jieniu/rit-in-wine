@@ -1,0 +1,91 @@
+name: Validate Rosetta-free arm64 (Wine + FEX)
+
+# Proves the Rosetta-free Apple-Silicon stack works for RIT: x86 RIT running on
+# ARM64 via FEX-Emu, with no Rosetta and no CrossOver. The 32-bit prefix (with
+# .NET 4.8 + RIT) is baked natively on amd64, then RIT is launched under FEX on
+# real arm64 hardware and its REST API must respond.
+#
+# EXPERIMENTAL: arm64-Wine+FEX for a 32-bit .NET app is bleeding edge; this
+# workflow is expected to need iteration from its own logs.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bake-prefix:
+    name: Bake x86 prefix (amd64, native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build win32 prefix with RIT installed
+        run: |
+          docker build -f test/Dockerfile.prefix    --build-arg WINEARCH=win32 -t p1 test
+          docker build -f test/Dockerfile.slim       --build-arg BASE=p1 -t p2 test
+          docker build -f test/Dockerfile.installed  --build-arg BASE=p2 -t p3 test
+      - name: Export the prefix
+        run: |
+          id=$(docker create p3)
+          docker cp "$id:/opt/rit-prefix" ./rit-prefix
+          docker rm "$id"
+          tar -C . -cf rit-prefix.tar rit-prefix
+      - uses: actions/upload-artifact@v4
+        with: { name: rit-prefix, path: rit-prefix.tar }
+
+  fex-arm64:
+    name: Run RIT under FEX (arm64, Rosetta-free)
+    needs: bake-prefix
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: rit-prefix }
+      - run: tar -xf rit-prefix.tar
+
+      - name: Install FEX-Emu
+        run: |
+          sudo add-apt-repository -y ppa:fex-emu/fex
+          sudo apt-get update
+          sudo apt-get install -y fex-emu
+
+      - name: Fetch an x86_64 RootFS (writable) for FEX
+        run: |
+          # Non-interactive: grab an Ubuntu rootfs and extract it writable so we
+          # can install Wine into it.
+          FEXRootFSFetcher -y -x --distro-name=ubuntu --distro-version=24.04 || \
+            FEXRootFSFetcher -y || true
+          echo "FEX_ROOTFS=$(ls -d ~/.fex-emu/RootFS/* 2>/dev/null | head -1)" >> "$GITHUB_ENV"
+
+      - name: Install x86 Wine into the RootFS (runs under FEX)
+        run: |
+          export FEX_ROOTFS="${FEX_ROOTFS}"
+          FEXBash -c '
+            set -e
+            dpkg --add-architecture i386
+            apt-get update
+            apt-get install -y --no-install-recommends \
+              wine wine32 wine64 xvfb winbind curl iproute2
+          '
+
+      - name: Launch RIT under FEX and assert the API responds
+        run: |
+          export FEX_ROOTFS="${FEX_ROOTFS}"
+          # Drop the natively-baked prefix into the FEX rootfs home.
+          cp -a rit-prefix "${FEX_ROOTFS}/root-rit-prefix" 2>/dev/null || sudo cp -a rit-prefix "${FEX_ROOTFS}/root-rit-prefix"
+          FEXBash -c '
+            set -u
+            export WINEPREFIX=/root-rit-prefix WINEARCH=win32 WINEDEBUG=-all
+            export WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=:99 HOME=/root
+            export XDG_RUNTIME_DIR=/tmp/xdg; mkdir -p /tmp/xdg
+            Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 & sleep 3
+            CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
+            echo "== launching RIT under FEX =="
+            wine "$CLIENT" >/tmp/rit.log 2>&1 &
+            for i in $(seq 1 40); do
+              sleep 4
+              ss -ltn 2>/dev/null | grep -q ":9999" && { echo ":9999 listening"; ok=1; break; }
+            done
+            timeout 10 curl -s -o /dev/null -w "API: HTTP %{http_code} in %{time_total}s\n" \
+              http://127.0.0.1:9999/v1/case || echo "API: no response"
+            echo "== rit.log tail =="; tail -25 /tmp/rit.log
+            wineserver -k 2>/dev/null || true
+            test "${ok:-0}" = 1
+          '
