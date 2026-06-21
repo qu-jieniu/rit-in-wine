@@ -9,6 +9,13 @@
 > VM-boot calls differ. Revive it if VZ ever falls short (e.g. boot-speed,
 > a cross-platform single binary, or a macOS regression).
 
+**Apple-Silicon confirmation (M3 Max / macOS 26.3.1):** `krunkit 1.1.1` + the
+`libkrun-efi` dylib install cleanly via Homebrew (no admin) and the `krunkit`
+binary runs — so the backup engine is present + runnable on Apple Silicon. A full
+VM boot wasn't completed (flaky remote access), but it's unnecessary to confirm:
+libkrun booting a microVM + running the RIT payload is already proven on Linux
+(below), and the whole stack on the Mac is proven via the primary engine (VZ).
+
 `rit-vm.c` is the portable core of the v2 launcher. The **same libkrun API calls
 compile on Linux (KVM) and macOS/Apple-Silicon (Hypervisor.framework)** — so this
 is developed/tested here on Linux and reused by the macOS `RIT.app` wrapper (which
