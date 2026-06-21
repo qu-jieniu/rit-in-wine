@@ -45,53 +45,48 @@ jobs:
     needs: bake-prefix
     runs-on: ubuntu-24.04-arm
     steps:
-      - name: Install FEX-Emu
+      - name: Install FEX-Emu + binfmt handlers
         run: |
           sudo add-apt-repository -y ppa:fex-emu/fex
           sudo apt-get update
-          sudo apt-get install -y fex-emu-armv8.0
+          sudo apt-get install -y fex-emu-armv8.0 fex-emu-binfmt32 fex-emu-binfmt64
+          ls /proc/sys/fs/binfmt_misc/ | grep -i fex || true
 
-      - name: Export the x86 image filesystem as a FEX RootFS
+      - name: Export the x86 image to a chroot
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker pull --platform linux/amd64 "$REF"
           cid=$(docker create --platform linux/amd64 "$REF")
-          sudo mkdir -p /opt/rootfs
-          docker export "$cid" | sudo tar -C /opt/rootfs -xf -
+          sudo mkdir -p /opt/x86root
+          docker export "$cid" | sudo tar -C /opt/x86root -xf -
           docker rm "$cid"
-          # Wine refuses a prefix not owned by the current user; the export is
-          # root-owned, so hand the rootfs to the runner user.
-          sudo chown -R "$(id -u):$(id -g)" /opt/rootfs
-          echo "=== HOST diagnostics: is the baked prefix in the rootfs? ==="
-          ls /opt/rootfs/opt/rit-prefix/ | head
-          CX="/opt/rootfs/opt/rit-prefix/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
-          test -f "$CX" && echo "HOST: Client.exe present ($(stat -c%s "$CX") bytes)" || echo "HOST: Client.exe MISSING"
-          test -f /opt/rootfs/opt/rit-prefix/system.reg && echo "HOST: system.reg present" || echo "HOST: system.reg MISSING"
-          # A Wine prefix must be WRITABLE; FEX serves rootfs paths read-only.
-          # Move it OUT of the rootfs but keep the SAME bake path (/opt/rit-prefix)
-          # so Wine doesn't try to re-init (path mismatch triggers wine.inf update).
-          # Guest /opt/rit-prefix is no longer in the rootfs -> FEX host passthrough.
-          sudo mv /opt/rootfs/opt/rit-prefix /opt/rit-prefix
-          sudo chown -R "$(id -u):$(id -g)" /opt/rit-prefix
-          echo "HOST: prefix moved to host /opt/rit-prefix (writable, outside rootfs, same as bake path)"
-          # point FEX at this rootfs (system + wine binaries, read-only)
-          mkdir -p ~/.fex-emu
-          printf '{"Config":{"RootFS":"/opt/rootfs"},"ThunksDB":{}}\n' > ~/.fex-emu/Config.json
-          ls /opt/rootfs/opt/wine-stable/bin/wine && echo "rootfs has wine"
+          CX="/opt/x86root/opt/rit-prefix/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
+          test -f "$CX" && echo "Client.exe present ($(stat -c%s "$CX") bytes)" || { echo "MISSING"; exit 1; }
+          test -f /opt/x86root/opt/wine-stable/share/wine/wine.inf && echo "wine.inf present in chroot"
 
-      - name: Launch RIT under FEX and assert the API responds
+      - name: Run RIT under FEX via chroot, assert the API responds
         run: |
-          export FEX_ROOTFS=/opt/rootfs
-          cat > /tmp/run.sh <<'SH'
+          ROOT=/opt/x86root
+          # Bind the kernel filesystems the guest needs (Xvfb, wine, sockets).
+          sudo mount -t proc  proc  "$ROOT/proc"
+          sudo mount --rbind  /sys  "$ROOT/sys"
+          sudo mount --rbind  /dev  "$ROOT/dev"
+          sudo mount -t tmpfs tmpfs "$ROOT/tmp"
+          # Tell FEX the x86 rootfs is the chroot itself ("/"), so guest file I/O
+          # for wine.inf / drivers / the prefix all resolve to real x86 files.
+          sudo mkdir -p "$ROOT/root/.fex-emu"
+          echo '{"Config":{"RootFS":"/"}}' | sudo tee "$ROOT/root/.fex-emu/Config.json" >/dev/null
+          sudo tee "$ROOT/run.sh" >/dev/null <<'SH'
           set -u
           export WINEPREFIX=/opt/rit-prefix WINEARCH=win32 WINEDEBUG=-all
           export WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
+          export PATH=/opt/wine-stable/bin:/usr/bin:/bin
           mkdir -p /tmp/xdg
           Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 & sleep 3
           CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
-          echo "== GUEST diagnostics =="
-          echo "guest ls /opt/rit-prefix:"; ls /opt/rit-prefix 2>&1 | head
-          echo "guest can WRITE to prefix?:"; touch /opt/rit-prefix/.fexwrite 2>&1 && echo "  writable" || echo "  NOT writable"
+          echo "== chroot guest sees: =="
+          head -c 40 /opt/wine-stable/share/wine/wine.inf >/dev/null 2>&1 && echo "  wine.inf readable" || echo "  wine.inf NOT readable"
+          ls /opt/wine-stable/lib/wine/i386-unix/winex11.so >/dev/null 2>&1 && echo "  winex11.so present" || echo "  winex11.so MISSING"
           echo "== launching RIT under FEX (slow; .NET JIT-on-JIT) =="
           wine "$CLIENT" >/tmp/rit.log 2>&1 &
           ok=0
@@ -105,6 +100,5 @@ jobs:
           wineserver -k 2>/dev/null || true
           test "$ok" = 1
           SH
-          # run the script inside the FEX rootfs (x86 userland under FEX)
-          sudo cp /tmp/run.sh /opt/rootfs/run.sh
-          FEX_ROOTFS=/opt/rootfs FEXBash -c 'bash /run.sh'
+          # x86 binaries inside the chroot execute transparently via the FEX binfmt handler.
+          sudo chroot "$ROOT" /bin/bash /run.sh
