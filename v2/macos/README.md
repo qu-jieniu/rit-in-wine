@@ -49,7 +49,12 @@ TODO (Mac-side, marked in `main.swift`):
    microVM is arm64.
 4. **Perf** — virtiofs is slow for Wine/.NET start; tune (caching) or ship a
    bootable-init disk image (see `v2/libkrun/README.md`).
-5. **Bundle libkrun** + sign with the entitlements; notarize the `.app`/`.pkg`.
+5. **Bundle libkrun** + sign with the entitlements; notarize, ship as a **`.dmg`**
+   (drag `RIT.app` → Applications — self-contained, no admin password). Gate the OS
+   with `LSMinimumSystemVersion = 14.0` in `Info.plist`.
+6. **CI:** build/sign/notarize on a GitHub **`macos-14`** (Apple Silicon) runner —
+   no Mac ownership needed. The runner can't boot a Hypervisor.framework VM (no
+   nested virt), so the microVM boot-test is one manual pass on real hardware.
 
 ## Build (on macOS 14+, Apple Silicon)
 
