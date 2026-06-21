@@ -1,0 +1,55 @@
+name: Build RIT.app (Apple Silicon)
+
+# Builds the Apple-Silicon RIT.app on a GitHub macos-14 (Apple Silicon) runner and
+# packages a .dmg. The runner can BUILD + SIGN but cannot boot the inner VM (no
+# nested virtualization), so this verifies/produces the app; the functional
+# VM-boot test is the rare bare-metal step (validated live on M3 Max / macOS 26).
+#
+# Ad-hoc signs by default. Set repo secret CODESIGN_IDENTITY (+ NOTARY_*) and the
+# build signs/notarizes for distribution.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [arm64-and-httpsys-tests]
+    paths:
+      - .github/workflows/build-mac-silicon.yml
+      - v2/macos/RITApp/**
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build RIT.app (Swift + RoyalVNC -> bundle)
+        env:
+          SIGN_ID: ${{ secrets.CODESIGN_IDENTITY }}   # empty -> ad-hoc
+        run: |
+          cd v2/macos/RITApp
+          chmod +x build-app.sh
+          ./build-app.sh
+
+      - name: Package .dmg
+        run: |
+          hdiutil create -volname "Rotman Interactive Trader" \
+            -srcfolder v2/macos/RITApp/build/RIT.app -ov -format UDZO \
+            RIT-mac-apple-silicon.dmg
+          ls -la RIT-mac-apple-silicon.dmg
+
+      - name: Notarize + staple (only when signing identity + notary creds are set)
+        if: ${{ secrets.CODESIGN_IDENTITY != '' && secrets.NOTARY_PASSWORD != '' }}
+        run: |
+          xcrun notarytool submit RIT-mac-apple-silicon.dmg \
+            --apple-id "${{ secrets.NOTARY_APPLE_ID }}" \
+            --team-id "${{ secrets.NOTARY_TEAM_ID }}" \
+            --password "${{ secrets.NOTARY_PASSWORD }}" --wait
+          xcrun stapler staple RIT-mac-apple-silicon.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RIT-mac-apple-silicon
+          path: RIT-mac-apple-silicon.dmg

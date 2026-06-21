@@ -1,51 +1,47 @@
 #!/bin/bash
-# RIT.AppImage entry point. Same single-master / clean-teardown model as the Mac
-# launcher: run RIT in the foreground, then kill the whole Wine session so no
-# wineserver/services.exe linger.
+# RIT.AppImage — runs RIT in the bundled stock-WineHQ userspace via bubblewrap.
+#
+# The whole working Wine 11 + .NET + RIT userspace (a Debian rootfs) is bundled, so
+# the AppImage runs on ANY 64-bit Linux host with zero dependencies — no 32-bit
+# libs, no winex11 whack-a-mole. bwrap (from inside the rootfs, invoked via the
+# rootfs's own loader so it needs nothing from the host) maps the rootfs as / and
+# binds in the host's X socket. Display is the host's native X (or XWayland) — a
+# real window, no VNC. Teardown: --die-with-parent + --unshare-pid means the
+# kernel reaps every process (wineserver, services…) when the launcher dies,
+# however it dies (incl. Force Quit). Requires unprivileged user namespaces
+# (default on all modern distros).
 set -u
 HERE="$(dirname "$(readlink -f "$0")")"
+R="$HERE/rootfs"
 
-export WINELOADER="$HERE/usr/bin/wine"
-export WINESERVER="$HERE/usr/bin/wineserver"
-export PATH="$HERE/usr/bin:$PATH"
-export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/lib/x86_64-linux-gnu:$HERE/usr/lib/i386-linux-gnu:${LD_LIBRARY_PATH:-}"
-export WINEDLLPATH="$HERE/usr/lib/wine"
-
-export WINEARCH=win32
-export WINEDEBUG=-all
-export WINEDLLOVERRIDES="mscoree=n;mshtml=d"
-
+# Writable, persistent prefix in the user's home (first run: seed from the bundle).
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}/RIT"
-export WINEPREFIX="$DATA/prefix"
-mkdir -p "$DATA"
-
-# First run: copy the bundled prefix into a writable location.
-if [ ! -f "$WINEPREFIX/.rit-ready" ]; then
-    echo "First run: setting up RIT (one-time)..." >&2
-    rm -rf "$WINEPREFIX"
-    cp -a "$HERE/rit-prefix" "$WINEPREFIX"
-    touch "$WINEPREFIX/.rit-ready"
+PFX="$DATA/prefix"
+if [ ! -f "$PFX/.rit-ready" ]; then
+    echo "First run: setting up RIT (one-time)…" >&2
+    mkdir -p "$DATA"; rm -rf "$PFX"
+    cp -a "$R/opt/rit-prefix" "$PFX"
+    touch "$PFX/.rit-ready"
 fi
 
-CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
+# Invoke the rootfs's bwrap through the rootfs's own dynamic loader, so it depends
+# on nothing from the host (the host only needs a kernel with user namespaces).
+LD="$R/lib64/ld-linux-x86-64.so.2"
+LP="$R/lib/x86_64-linux-gnu:$R/usr/lib/x86_64-linux-gnu:$R/lib64:$R/usr/lib"
 
-# Bulletproof teardown. Run the whole Wine session inside a PID namespace: if this
-# launcher dies for ANY reason — normal exit, window close, SIGTERM, or even a
-# Force Quit / `kill -9` — the kernel SIGKILLs EVERY process in the namespace
-# (wineserver, services.exe, plugplay, explorer… all of it). No lingering or
-# hidden background process can survive. Verified: 0 survivors after SIGKILL.
-#   --user --map-current-user : rootless; Wine stays your uid, prefix still owned
-#                               by it (ownership check passes), no root warning.
-#   --pid --fork              : new PID namespace; Wine becomes its init (PID 1).
-#   --kill-child              : ties the namespace's death to this launcher's
-#                               (parent-death signal) — covers the SIGKILL case.
-NS="unshare --user --map-current-user --pid --fork --kill-child --mount-proc"
-if $NS true 2>/dev/null; then
-    exec $NS -- "$WINELOADER" "$CLIENT" "$@"
-else
-    # Hardened kernels may disable unshare/user namespaces — fall back to a
-    # best-effort wineserver -k on exit (covers everything but Force Quit).
-    cleanup() { "$WINESERVER" -k >/dev/null 2>&1 || true; }
-    trap cleanup EXIT INT TERM HUP
-    "$WINELOADER" "$CLIENT" "$@"
-fi
+exec "$LD" --library-path "$LP" "$R/usr/bin/bwrap" \
+    --bind "$R" / \
+    --bind "$PFX" /opt/rit-prefix \
+    --dev /dev --proc /proc --tmpfs /tmp --tmpfs /run --tmpfs /dev/shm \
+    --ro-bind-try /tmp/.X11-unix /tmp/.X11-unix \
+    --ro-bind-try "${XAUTHORITY:-$HOME/.Xauthority}" /root/.Xauthority \
+    --ro-bind-try /etc/resolv.conf /etc/resolv.conf \
+    --setenv HOME /root \
+    --setenv DISPLAY "${DISPLAY:-:0}" \
+    --setenv XAUTHORITY /root/.Xauthority \
+    --setenv WINEPREFIX /opt/rit-prefix \
+    --setenv WINEARCH win32 \
+    --setenv WINEDEBUG -all \
+    --setenv WINEDLLOVERRIDES "mscoree=n;mshtml=d" \
+    --unshare-pid --die-with-parent \
+    /usr/bin/wine "C:\\Program Files\\Rotman\\RIT User Application\\Client.exe" "$@"

@@ -1,9 +1,7 @@
-# Assembles RIT.AppImage from a prefix image that already has RIT installed.
-ARG BASE=rit-prefix:installed
+# Rootfs for the portable RIT-x86_64.AppImage: the minimal RIT payload (stock
+# Wine 11 + .NET 4.8 + RIT, win32) + bubblewrap. The AppImage bundles this whole
+# userspace and runs RIT inside it via bwrap, so it needs nothing from the host.
+ARG BASE=rit-v2-min
 FROM ${BASE}
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        file curl ca-certificates zstd && \
+RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
-COPY build-appimage.sh AppRun rit.desktop rit-icon.png /build/
-RUN chmod +x /build/build-appimage.sh
-ENTRYPOINT ["/build/build-appimage.sh"]
