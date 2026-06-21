@@ -6,6 +6,11 @@ name: Publish RIT payload (GHCR)
 
 on:
   workflow_dispatch:
+  # workflow_dispatch only works from the default branch; until this merges to
+  # master, trigger by pushing a change to this file on the feature branch.
+  push:
+    branches: [arm64-and-httpsys-tests]
+    paths: [.github/workflows/publish-payload.yml]
 
 permissions:
   contents: read
