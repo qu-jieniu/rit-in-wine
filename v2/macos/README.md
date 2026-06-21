@@ -1,9 +1,21 @@
 # RIT.app (v2) — macOS wrapper (skeleton)
 
 Native `RIT.app` that boots the v2 payload in a **libkrun microVM** and shows
-RIT's window via a **native VNC view** (no browser). The student double-clicks;
+RIT's window via an **embedded VNC view** (no browser). The student double-clicks;
 the microVM + FEX + Wine are invisible. **Compiles on a Mac only** — this is the
 remaining v2 piece; the rest (payload, libkrun launcher, FEX-runs-RIT) is proven.
+
+## Polish built into the skeleton
+- **No lingering processes.** The microVM runs *in-process* (libkrun via
+  Hypervisor.framework), so quitting the app kills the VM — and Wine/RIT/FEX/Xvnc
+  inside it — automatically. Even a crash takes it all down. `applicationWill
+  Terminate -> teardown()` makes the quit explicit. (Embedded VNC, not the
+  separate Screen Sharing app, so the GUI window closes with the app too.)
+- **Conflict-free, configurable API port.** `HostPort.pickAPI()` prefers `:9999`
+  (the course default); if it's already in use on the student's Mac, it falls back
+  to a free port and the UI shows the live URL ("API: http://localhost:NNNN — use
+  this in Python/R"). A `apiPort` UserDefault lets them pin one. RIT inside the VM
+  always stays on its own `:9999`; only the host mapping changes.
 
 ## Architecture
 
