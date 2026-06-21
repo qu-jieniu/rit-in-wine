@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Rotman Interactive Trader</string>
+  <key>CFBundleDisplayName</key><string>Rotman Interactive Trader</string>
+  <key>CFBundleIdentifier</key><string>ca.utoronto.rotman.rit</string>
+  <key>CFBundleExecutable</key><string>RITApp</string>
+  <key>CFBundleIconFile</key><string>RIT.icns</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.8.464</string>
+  <key>CFBundleVersion</key><string>1.8.464</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <!-- VZ Linux-VM support is solid from macOS 13 (validated live on macOS 26 / M3 Max). -->
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+</dict>
+</plist>

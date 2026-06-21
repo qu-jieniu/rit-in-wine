@@ -39,15 +39,22 @@ export WINEPREFIX=/opt/rit-prefix WINEARCH=win32 WINEDEBUG=-all
 export WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=127.0.0.1:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
 export WINELOADER=/opt/wine-stable/bin/wine PATH=/opt/wine-stable/bin:/usr/bin:/bin
 mkdir -p /tmp/xdg
+# Plain window (no Wine title bar). Blend the X root with RIT's window gray so the
+# thin uncovered strip isn't a black bar, and enable font smoothing.
+xsetroot -solid '#f0f0f0' 2>/dev/null || true
+wine reg add "HKCU\Control Panel\Desktop" /v FontSmoothing     /t REG_SZ    /d 2    /f >/dev/null 2>&1
+wine reg add "HKCU\Control Panel\Desktop" /v FontSmoothingType /t REG_DWORD /d 2    /f >/dev/null 2>&1
 CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
-echo "== launching RIT under FEX (slow on first JIT — be patient) =="
+echo "== launching RIT under FEX (plain window, no title bar) =="
 wine "$CLIENT" >/tmp/rit.log 2>&1 &
 for i in $(seq 1 120); do
   sleep 5
   ss -ltn 2>/dev/null | grep -q ":9999" && { echo ">>> RIT API listening on :9999 after $((i*5))s"; break; }
 done
 echo "== rit.log tail =="; tail -8 /tmp/rit.log
-wait
+wait                                   # blocks until RIT (Client.exe) exits
+wineserver -k 2>/dev/null || true      # then tear down the whole Wine session
+echo "== Wine session torn down =="
 SH
 
 echo "== starting RIT under FEX =="

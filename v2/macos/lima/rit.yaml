@@ -37,4 +37,4 @@ provision:
       export DEBIAN_FRONTEND=noninteractive
       add-apt-repository -y ppa:fex-emu/fex
       apt-get update
-      apt-get install -y docker.io fex-emu-armv8.0 xvfb x11vnc x11-utils curl ca-certificates
+      apt-get install -y docker.io fex-emu-armv8.0 xvfb x11vnc x11-utils x11-xserver-utils curl ca-certificates

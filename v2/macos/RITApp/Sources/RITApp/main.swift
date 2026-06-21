@@ -86,8 +86,27 @@ final class RITController: NSObject, VNCConnectionDelegate {
     func connection(_ c: VNCConnection, didUpdateCursor cursor: VNCCursor) {}
 }
 
+// Owns the VM lifecycle: quitting RITApp (⌘Q or closing the window) stops the VM,
+// so Wine/RIT/FEX/Xvfb all die with it — nothing lingers. (The raw-VZ version
+// makes this in-process and crash-proof; for the Lima MVP we stop the VM.)
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
+    func applicationWillTerminate(_ n: Notification) {
+        guard ProcessInfo.processInfo.environment["RIT_OWN_VM"] != "0" else { return }
+        let limactl = ProcessInfo.processInfo.environment["RIT_LIMACTL"]
+            ?? NSHomeDirectory() + "/lima/bin/limactl"
+        let vm = ProcessInfo.processInfo.environment["RIT_VM"] ?? "rit"
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: limactl)
+        p.arguments = ["stop", vm]
+        try? p.run(); p.waitUntilExit()
+    }
+}
+
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
+let delegate = AppDelegate()
+app.delegate = delegate
 let controller = RITController()
 controller.connect()
 app.activate(ignoringOtherApps: true)
