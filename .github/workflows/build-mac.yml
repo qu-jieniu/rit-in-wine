@@ -1,28 +1,10 @@
 name: Build RIT.pkg (macOS)
 
+# v1 (GPTK/Rosetta). Dispatch-only so it doesn't auto-burn macOS minutes on every
+# push; run it manually once the Apple Developer signing secrets are set, or on a
+# tagged release.
 "on":
   workflow_dispatch:
-  push:
-    paths:
-      - "**.sh"
-      - "**.yml"
-      - "**.reg"
-      - "scripts/**"
-      - "wine-version.txt"
-      - "client-application-version.txt"
-      - "http.sys"
-      - "wine-host-matches-star-wildcard.patch"
-      - "RIT.iconset/**"
-  pull_request:
-    paths:
-      - "**.sh"
-      - "**.yml"
-      - "**.reg"
-      - "scripts/**"
-      - "wine-version.txt"
-      - "client-application-version.txt"
-      - "http.sys"
-      - "RIT.iconset/**"
   release:
     types: [created]
 
