@@ -1,0 +1,46 @@
+name: Test RIT version (pre-release gate)
+
+# Manual gate: pick a RIT version, and this installs that MSI on stock Wine 11,
+# launches RIT, and confirms its REST API responds. Green => safe to pin in
+# rit.lock.json and cut a release. No auto-tracking; you stay in control.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "RIT version to test (e.g. 1.8.464)"
+        required: true
+        default: "1.8.464"
+
+jobs:
+  gate:
+    name: Install + launch + API smoke (Wine 11, no CrossOver)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the MSI (keyed on version)
+        id: msi
+        uses: actions/cache@v4
+        with:
+          path: test/rit.msi
+          key: rit-msi-${{ inputs.version }}
+
+      - name: Download MSI on cache miss
+        if: steps.msi.outputs.cache-hit != 'true'
+        run: |
+          curl -fSL --retry 3 \
+            "https://rit.306w.ca/release/${{ inputs.version }}/RIT%20User%20Application-${{ inputs.version }}.msi" \
+            -o test/rit.msi
+          ls -l test/rit.msi
+
+      - name: Build win32 Wine 11 + .NET 4.8 prefix
+        run: docker build -f test/Dockerfile.prefix --build-arg WINEARCH=win32 -t rit-prefix:win32 test
+
+      - name: Install RIT + launch + assert the API responds
+        run: |
+          docker run --rm --security-opt seccomp=unconfined --shm-size=1g \
+            -e RIT_VERSION=${{ inputs.version }} \
+            -v "$PWD/test/rit.msi:/test/rit.msi:ro" \
+            rit-prefix:win32 | tee out.log
+          grep -q "VERDICT: PASS" out.log

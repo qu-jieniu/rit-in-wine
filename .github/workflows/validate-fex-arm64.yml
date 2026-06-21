@@ -1,0 +1,104 @@
+name: Validate Rosetta-free arm64 (Wine + FEX)
+
+# Proves the Rosetta-free Apple-Silicon stack for RIT: x86 RIT running on ARM64
+# via FEX-Emu, no Rosetta, no CrossOver.
+#
+# FEX is not container-friendly (it needs its own RootFS, not the container fs),
+# so we DON'T run the x86 image under binfmt. Instead we export the x86 image's
+# filesystem as a FEX RootFS and run RIT via FEXBash against it.
+#
+# EXPERIMENTAL: arm64-Wine+FEX for a 32-bit .NET app is bleeding edge.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [arm64-and-httpsys-tests]
+    paths: [.github/workflows/validate-fex-arm64.yml]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REF: ghcr.io/qu-jieniu/rit-in-wine/rit-prefix:win32
+
+jobs:
+  bake-prefix:
+    name: Bake x86 RIT image (amd64) — reuse if present
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build + push only if the stable tag is missing
+        run: |
+          if docker manifest inspect "$REF" >/dev/null 2>&1; then
+            echo "reusing existing $REF"; exit 0
+          fi
+          docker build -f test/Dockerfile.prefix    --build-arg WINEARCH=win32 -t p1 test
+          docker build -f test/Dockerfile.slim       --build-arg BASE=p1 -t p2 test
+          docker build -f test/Dockerfile.installed  --build-arg BASE=p2 -t "$REF" test
+          docker push "$REF"
+
+  fex-arm64:
+    name: Run RIT under FEX (arm64, Rosetta-free)
+    needs: bake-prefix
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Install FEX-Emu
+        run: |
+          sudo add-apt-repository -y ppa:fex-emu/fex
+          sudo apt-get update
+          sudo apt-get install -y fex-emu-armv8.0
+
+      - name: Export the x86 image filesystem as a FEX RootFS
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker pull --platform linux/amd64 "$REF"
+          cid=$(docker create --platform linux/amd64 "$REF")
+          sudo mkdir -p /opt/rootfs
+          docker export "$cid" | sudo tar -C /opt/rootfs -xf -
+          docker rm "$cid"
+          # Wine refuses a prefix not owned by the current user; the export is
+          # root-owned, so hand the rootfs to the runner user.
+          sudo chown -R "$(id -u):$(id -g)" /opt/rootfs
+          echo "=== HOST diagnostics: is the baked prefix in the rootfs? ==="
+          ls /opt/rootfs/opt/rit-prefix/ | head
+          CX="/opt/rootfs/opt/rit-prefix/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
+          test -f "$CX" && echo "HOST: Client.exe present ($(stat -c%s "$CX") bytes)" || echo "HOST: Client.exe MISSING"
+          test -f /opt/rootfs/opt/rit-prefix/system.reg && echo "HOST: system.reg present" || echo "HOST: system.reg MISSING"
+          # point FEX at this rootfs
+          mkdir -p ~/.fex-emu
+          printf '{"Config":{"RootFS":"/opt/rootfs"},"ThunksDB":{}}\n' > ~/.fex-emu/Config.json
+          ls /opt/rootfs/opt/wine-stable/bin/wine && echo "rootfs has wine"
+
+      - name: Launch RIT under FEX and assert the API responds
+        run: |
+          export FEX_ROOTFS=/opt/rootfs
+          cat > /tmp/run.sh <<'SH'
+          set -u
+          export WINEPREFIX=/opt/rit-prefix WINEARCH=win32 WINEDEBUG=-all
+          export WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
+          mkdir -p /tmp/xdg
+          Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 & sleep 3
+          CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
+          echo "== GUEST diagnostics: what does FEX show the guest at the prefix path? =="
+          echo "guest ls /opt/rit-prefix:"; ls /opt/rit-prefix 2>&1 | head
+          echo "guest Client.exe:"; ls -la "$CLIENT" 2>&1 | head -1
+          echo "guest /tmp passthrough probe:"; echo hi > /tmp/fexprobe 2>&1 && cat /tmp/fexprobe
+          echo "== launching RIT under FEX (slow; .NET JIT-on-JIT) =="
+          wine "$CLIENT" >/tmp/rit.log 2>&1 &
+          ok=0
+          for i in $(seq 1 90); do
+            sleep 5
+            ss -ltn 2>/dev/null | grep -q ":9999" && { echo ":9999 listening after $((i*5))s"; ok=1; break; }
+          done
+          timeout 15 curl -s -o /dev/null -w "API: HTTP %{http_code} in %{time_total}s\n" \
+            http://127.0.0.1:9999/v1/case || echo "API: no response"
+          echo "== rit.log tail =="; tail -30 /tmp/rit.log
+          wineserver -k 2>/dev/null || true
+          test "$ok" = 1
+          SH
+          # run the script inside the FEX rootfs (x86 userland under FEX)
+          sudo cp /tmp/run.sh /opt/rootfs/run.sh
+          FEX_ROOTFS=/opt/rootfs FEXBash -c 'bash /run.sh'

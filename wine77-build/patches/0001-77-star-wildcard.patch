@@ -1,0 +1,13 @@
+diff --git a/dlls/http.sys/http.c b/dlls/http.sys/http.c
+index 523c70e..4d499d9 100644
+--- a/dlls/http.sys/http.c
++++ b/dlls/http.sys/http.c
+@@ -323,7 +323,7 @@ static BOOL host_matches(const struct connection *conn, const struct request_que
+ {
+     const char *conn_host = (conn->url[0] == '/') ? conn->host : conn->url + 7;
+ 
+-    if (queue->url[7] == '+')
++    if (queue->url[7] == '+' || queue->url[7] == '*')
+     {
+         const char *queue_port = strchr(queue->url + 7, ':');
+         return !strncmp(queue_port, strchr(conn_host, ':'), strlen(queue_port) - 1 /* strip final slash */);

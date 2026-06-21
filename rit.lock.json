@@ -1,0 +1,11 @@
+{
+  "version": "1.8.464",
+  "url": "https://rit.306w.ca/release/1.8.464/RIT%20User%20Application-1.8.464.msi",
+  "msi_sha256": "b959ba5ca8f81f23d91e4decde558c73bdb801ddfff998300de7022c5929c2c7",
+  "msi_size": 9030656,
+  "product": "RIT User Application",
+  "exe": "Client.exe",
+  "wine_branch": "winehq-stable",
+  "wine_arch": "win32",
+  "_note": "Single source of truth for the pinned RIT build. Deployment is via the OFFICIAL MSI (RIT User Application) installed silently with `wine msiexec /i <msi> /qn` -- NOT ClickOnce. Client.exe hosts the local REST API on :9999. The separate 'RIT Instructor Application' MSI (market server) and the RTD/API Data Link MSI (Excel integration) are NOT part of this bundle. version+sha256 pin the exact bytes; the gate, .pkg, and AppImage builds read from here. Bump only after the pre-release gate passes."
+}

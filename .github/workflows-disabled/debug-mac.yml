@@ -1,0 +1,60 @@
+name: Debug shell on macOS runner
+
+# Manual-trigger workflow that builds RIT.app and then opens a tmate SSH
+# session into the runner. Use this when you want to poke at the build
+# environment, test what the .app does on launch, or run curl probes
+# against http://127.0.0.1:9999 inside the runner.
+#
+# NB: this is a TERMINAL session only. Earlier versions of this workflow
+# tried to expose macOS Screen Sharing for VNC; that does not work on
+# GitHub Actions runners because the macOS TCC database doesn't grant
+# the Screen-Capture entitlement to anything (only the human-at-the-Mac
+# can flip that, or MDM). The daemon binds the port but won't actually
+# stream a screen. Don't ship that lie.
+
+"on":
+  workflow_dispatch:
+    inputs:
+      do_build:
+        description: "Build RIT.app before opening the session (default: yes)"
+        required: false
+        default: "true"
+
+jobs:
+  debug:
+    name: tmate shell on macOS
+    runs-on: macos-latest
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install winetricks
+        if: ${{ inputs.do_build == 'true' }}
+        run: brew install winetricks
+
+      - name: Cache wine engine + prefix
+        if: ${{ inputs.do_build == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            .work/*.tar.xz
+            .work/wine
+            .work/prefix
+          key: build-${{ runner.os }}-gptk-${{ hashFiles('http.sys') }}
+
+      - name: Build RIT.app
+        if: ${{ inputs.do_build == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKIP_CODESIGN: "1"
+        run: |
+          chmod +x ./build-rit-app.sh
+          ./build-rit-app.sh
+          ls -la out/
+
+      - name: Open tmate session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+          detached: false

@@ -1,0 +1,75 @@
+name: http.sys API test (upstream Wine, no CrossOver)
+
+# Proves RIT's REST API path (a "http://*:PORT/" HttpListener registration)
+# works under upstream Wine, with no CrossOver, no .NET, no winetricks.
+#
+#   x86_64-native : Wine 11 on amd64 hardware. Asserts stock Wine PASSES and a
+#                   deliberately-broken driver FAILS (so the test isn't vacuous).
+#                   Builds the image once and pushes it to GHCR.
+#   arm64-emulated: PULLS that amd64 image and runs it under x86 emulation on
+#                   arm64 hardware -- the Rosetta-free Apple-Silicon model. We
+#                   only emulate at *run* time (fast); we never build under
+#                   emulation (that took 1.5h+).
+
+on:
+  push:
+    paths: [test/**, .github/workflows/test-httpsys.yml]
+  pull_request:
+    paths: [test/**, .github/workflows/test-httpsys.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/httptest
+
+jobs:
+  x86_64-native:
+    name: x86_64 (native, Wine 11)
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image ref
+        id: meta
+        run: echo "ref=${IMAGE,,}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build test image
+        run: docker build -f test/Dockerfile.x86_64 -t "${{ steps.meta.outputs.ref }}" test
+
+      - name: Stock upstream Wine must serve the API (PASS)
+        run: docker run --rm "${{ steps.meta.outputs.ref }}" stock
+
+      - name: Patched driver must also serve the API (PASS)
+        run: docker run --rm "${{ steps.meta.outputs.ref }}" patched
+
+      - name: Broken driver must hang (FAIL) -- guards against a vacuous test
+        run: |
+          if docker run --rm \
+               -v "$PWD/test/drivers/x86_64/http.sys.buggy:/test/http.sys:ro" \
+               "${{ steps.meta.outputs.ref }}" patched; then
+            echo "::error::buggy driver unexpectedly PASSED"; exit 1
+          fi
+          echo "buggy driver failed as expected -- test is meaningful"
+
+      - name: Push image for the arm64 job
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "${{ steps.meta.outputs.ref }}"
+
+  arm64-emulated:
+    name: arm64 (emulated x86_64, Rosetta-free model)
+    needs: x86_64-native
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Register x86_64 emulation (binfmt)
+        run: docker run --privileged --rm tonistiigi/binfmt --install amd64
+
+      - name: Pull the amd64 image and run it under emulation (PASS)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker run --rm --platform linux/amd64 "${{ needs.x86_64-native.outputs.image }}" stock

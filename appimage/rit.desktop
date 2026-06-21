@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=RIT
+GenericName=Rotman Interactive Trader
+Exec=AppRun
+Icon=rit
+Categories=Office;Finance;
+Terminal=false

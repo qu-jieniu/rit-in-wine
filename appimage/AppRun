@@ -1,0 +1,35 @@
+#!/bin/bash
+# RIT.AppImage entry point. Same single-master / clean-teardown model as the Mac
+# launcher: run RIT in the foreground, then kill the whole Wine session so no
+# wineserver/services.exe linger.
+set -u
+HERE="$(dirname "$(readlink -f "$0")")"
+
+export WINELOADER="$HERE/usr/bin/wine"
+export WINESERVER="$HERE/usr/bin/wineserver"
+export PATH="$HERE/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/lib/x86_64-linux-gnu:$HERE/usr/lib/i386-linux-gnu:${LD_LIBRARY_PATH:-}"
+export WINEDLLPATH="$HERE/usr/lib/wine"
+
+export WINEARCH=win32
+export WINEDEBUG=-all
+export WINEDLLOVERRIDES="mscoree=n;mshtml=d"
+
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}/RIT"
+export WINEPREFIX="$DATA/prefix"
+mkdir -p "$DATA"
+
+# First run: copy the bundled prefix into a writable location.
+if [ ! -f "$WINEPREFIX/.rit-ready" ]; then
+    echo "First run: setting up RIT (one-time)..." >&2
+    rm -rf "$WINEPREFIX"
+    cp -a "$HERE/rit-prefix" "$WINEPREFIX"
+    touch "$WINEPREFIX/.rit-ready"
+fi
+
+CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
+
+cleanup() { "$WINESERVER" -k >/dev/null 2>&1 || true; }
+trap cleanup EXIT INT TERM HUP
+
+"$WINELOADER" "$CLIENT" "$@"
