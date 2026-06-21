@@ -30,3 +30,22 @@ test/rit.msi
 
 # Claude Code harness state
 .claude/
+
+# --- from rit-on-mac (Mac build) ---
+# Build outputs
+work/
+.work/
+out/
+*.pkg
+*.dmg
+
+# Local test rig (developer-only; never shipped to students)
+overrides.conf
+*.creds
+autotype
+rit-autotype
+*.local
+*.local.*
+
+# macOS junk
+.DS_Store
