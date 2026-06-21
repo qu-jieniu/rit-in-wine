@@ -62,6 +62,11 @@ jobs:
           # Wine refuses a prefix not owned by the current user; the export is
           # root-owned, so hand the rootfs to the runner user.
           sudo chown -R "$(id -u):$(id -g)" /opt/rootfs
+          echo "=== HOST diagnostics: is the baked prefix in the rootfs? ==="
+          ls /opt/rootfs/opt/rit-prefix/ | head
+          CX="/opt/rootfs/opt/rit-prefix/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
+          test -f "$CX" && echo "HOST: Client.exe present ($(stat -c%s "$CX") bytes)" || echo "HOST: Client.exe MISSING"
+          test -f /opt/rootfs/opt/rit-prefix/system.reg && echo "HOST: system.reg present" || echo "HOST: system.reg MISSING"
           # point FEX at this rootfs
           mkdir -p ~/.fex-emu
           printf '{"Config":{"RootFS":"/opt/rootfs"},"ThunksDB":{}}\n' > ~/.fex-emu/Config.json
@@ -77,6 +82,10 @@ jobs:
           mkdir -p /tmp/xdg
           Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 & sleep 3
           CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
+          echo "== GUEST diagnostics: what does FEX show the guest at the prefix path? =="
+          echo "guest ls /opt/rit-prefix:"; ls /opt/rit-prefix 2>&1 | head
+          echo "guest Client.exe:"; ls -la "$CLIENT" 2>&1 | head -1
+          echo "guest /tmp passthrough probe:"; echo hi > /tmp/fexprobe 2>&1 && cat /tmp/fexprobe
           echo "== launching RIT under FEX (slow; .NET JIT-on-JIT) =="
           wine "$CLIENT" >/tmp/rit.log 2>&1 &
           ok=0
