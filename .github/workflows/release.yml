@@ -1,0 +1,127 @@
+name: Release builds
+
+# Builds the four download assets and attaches them to a GitHub Release:
+#   RIT-x86_64.AppImage · RIT-aarch64.AppImage · RIT-mac-intel.dmg · RIT-mac-apple-silicon.dmg
+# Linux legs run fully here. Mac legs are guarded on signing secrets so the
+# workflow never fails when they aren't set yet — they just skip.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ---------- Linux x86_64: native stock Wine, AppImage ----------
+  linux-x86_64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build prefix pipeline (win32 + .NET 4.8 + RIT MSI)
+        run: |
+          podman build -f test/Dockerfile.prefix    --build-arg WINEARCH=win32 -t rit-prefix:dotnet48-win32 test
+          podman build -f test/Dockerfile.slim      --build-arg BASE=rit-prefix:dotnet48-win32 -t rit-prefix:slim-win32 test
+          podman build -f test/Dockerfile.installed  -t rit-prefix:installed test
+      - name: Assemble RIT-x86_64.AppImage
+        run: |
+          podman build -f appimage/Dockerfile.appimage -t rit-appimage-builder appimage
+          podman run --rm --privileged -v "$PWD/appimage/out:/out" rit-appimage-builder
+      - name: Export the win32 prefix for the Mac legs
+        run: |
+          cid=$(podman create rit-prefix:installed)
+          podman export "$cid" | zstd --ultra -22 -T0 > rit-prefix-win32.tar.zst
+          podman rm "$cid"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: |
+            appimage/out/RIT-x86_64.AppImage
+            rit-prefix-win32.tar.zst
+
+  # ---------- Linux arm64: stock Wine + FEX, AppImage ----------
+  # Builds on a native arm64 runner. The arm64 AppImage bundles FEX so it runs the
+  # x86 Wine/RIT (same proven path as validate-fex-arm64.yml), packaged for any
+  # arm64 Linux desktop. Build glue lives in appimage/ (arm64 variant).
+  linux-arm64:
+    if: ${{ vars.ENABLE_ARM64 == 'true' }}   # enable once appimage/build-appimage-arm64.sh lands
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble RIT-aarch64.AppImage (FEX + Wine 11)
+        run: appimage/build-appimage-arm64.sh   # FEX-packaging glue (see appimage/)
+      - uses: actions/upload-artifact@v4
+        with: { name: linux-arm64, path: appimage/out/RIT-aarch64.AppImage }
+
+  # ---------- Build stock Wine 11 from source for macOS x86_64 (vendored) ----------
+  wine-mac-x86_64:
+    if: ${{ vars.ENABLE_MAC == 'true' }}     # enable once mac/build-wine-from-source.sh lands
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build upstream Wine 11 (x86_64) -> tarball
+        run: mac/build-wine-from-source.sh      # vendored upstream Wine (not gcenx)
+      - uses: actions/upload-artifact@v4
+        with: { name: wine-mac-x86_64, path: stock-wine-11-osx-x86_64.tar.xz }
+
+  # ---------- Intel Mac: native Wine .dmg ----------
+  mac-intel:
+    needs: [linux-x86_64, wine-mac-x86_64]
+    if: ${{ vars.ENABLE_MAC == 'true' }}      # flip on once signing secrets exist
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: linux-x86_64 }
+      - uses: actions/download-artifact@v4
+        with: { name: wine-mac-x86_64 }
+      - name: Build + sign + notarize RIT-mac-intel.dmg
+        env:
+          WINE_TARBALL: stock-wine-11-osx-x86_64.tar.xz
+          PREFIX_TAR: rit-prefix-win32.tar.zst
+          SIGN_ID: ${{ secrets.CODESIGN_IDENTITY }}
+        run: |
+          mac/build-intel-app.sh
+          xcrun notarytool submit mac/build/RIT-mac-intel.dmg \
+            --apple-id "${{ secrets.NOTARY_APPLE_ID }}" --team-id "${{ secrets.NOTARY_TEAM_ID }}" \
+            --password "${{ secrets.NOTARY_PASSWORD }}" --wait
+          xcrun stapler staple mac/build/RIT-mac-intel.dmg
+      - uses: actions/upload-artifact@v4
+        with: { name: mac-intel, path: mac/build/RIT-mac-intel.dmg }
+
+  # ---------- Apple Silicon: v2 libkrun microVM .dmg ----------
+  mac-silicon:
+    needs: [linux-x86_64]
+    if: ${{ vars.ENABLE_MAC == 'true' }}
+    runs-on: macos-14                          # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the 631 MB payload locally? (no) — pull from the Linux leg
+        run: echo "payload built on Linux (v2/minimal) and downloaded as an artifact"
+      - name: Build + sign + notarize RIT-mac-apple-silicon.dmg
+        env:
+          SIGN_ID: ${{ secrets.CODESIGN_IDENTITY }}
+        run: v2/macos/build-silicon-app.sh     # swift build + bundle payload + sign + .dmg
+      # NOTE: the macos-14 runner can build/sign but cannot boot-test the microVM
+      # (no nested virtualization) — functional smoke-test is one manual pass.
+      - uses: actions/upload-artifact@v4
+        with: { name: mac-silicon, path: v2/macos/build/RIT-mac-apple-silicon.dmg }
+
+  # ---------- Attach everything to the Release ----------
+  publish:
+    needs: [linux-x86_64, linux-arm64, mac-intel, mac-silicon]
+    if: ${{ always() && github.event_name == 'release' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - name: Upload assets to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: false       # publish whatever legs produced this run
+          files: |
+            dist/RIT-x86_64.AppImage
+            dist/RIT-aarch64.AppImage
+            dist/RIT-mac-intel.dmg
+            dist/RIT-mac-apple-silicon.dmg
