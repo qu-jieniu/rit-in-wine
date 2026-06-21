@@ -45,48 +45,45 @@ jobs:
     needs: bake-prefix
     runs-on: ubuntu-24.04-arm
     steps:
-      - name: Install FEX-Emu + binfmt handlers
+      - name: Install FEX-Emu
         run: |
           sudo add-apt-repository -y ppa:fex-emu/fex
           sudo apt-get update
-          sudo apt-get install -y fex-emu-armv8.0 fex-emu-binfmt32 fex-emu-binfmt64
-          ls /proc/sys/fs/binfmt_misc/ | grep -i fex || true
+          sudo apt-get install -y fex-emu-armv8.0
 
-      - name: Export the x86 image to a chroot
+      - name: Export the x86 image as a FEX RootFS (canonical location)
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker pull --platform linux/amd64 "$REF"
           cid=$(docker create --platform linux/amd64 "$REF")
-          sudo mkdir -p /opt/x86root
-          docker export "$cid" | sudo tar -C /opt/x86root -xf -
+          # FEX auto-detects rootfs dirs under ~/.fex-emu/RootFS/<name>.
+          mkdir -p ~/.fex-emu/RootFS
+          sudo mkdir -p ~/.fex-emu/RootFS/rit
+          docker export "$cid" | sudo tar -C ~/.fex-emu/RootFS/rit -xf -
           docker rm "$cid"
-          CX="/opt/x86root/opt/rit-prefix/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
-          test -f "$CX" && echo "Client.exe present ($(stat -c%s "$CX") bytes)" || { echo "MISSING"; exit 1; }
-          test -f /opt/x86root/opt/wine-stable/share/wine/wine.inf && echo "wine.inf present in chroot"
+          sudo chown -R "$(id -u):$(id -g)" ~/.fex-emu
+          # Prefix must be writable -> keep it outside the (read-only) rootfs, at
+          # its bake path, as a host-passthrough copy.
+          sudo mv ~/.fex-emu/RootFS/rit/opt/rit-prefix /opt/rit-prefix
+          sudo chown -R "$(id -u):$(id -g)" /opt/rit-prefix
+          # Canonical config: RootFS is the NAME (resolved under ~/.fex-emu/RootFS/),
+          # not an absolute path (the bug last time).
+          printf '{"Config":{"RootFS":"rit"}}\n' > ~/.fex-emu/Config.json
+          echo "rootfs + config ready"; cat ~/.fex-emu/Config.json
 
-      - name: Run RIT under FEX via chroot, assert the API responds
+      - name: Run RIT under FEX (FEXBash) and assert the API responds
         run: |
-          ROOT=/opt/x86root
-          # Bind the kernel filesystems the guest needs (Xvfb, wine, sockets).
-          sudo mount -t proc  proc  "$ROOT/proc"
-          sudo mount --rbind  /sys  "$ROOT/sys"
-          sudo mount --rbind  /dev  "$ROOT/dev"
-          sudo mount -t tmpfs tmpfs "$ROOT/tmp"
-          # Tell FEX the x86 rootfs is the chroot itself ("/"), so guest file I/O
-          # for wine.inf / drivers / the prefix all resolve to real x86 files.
-          sudo mkdir -p "$ROOT/root/.fex-emu"
-          echo '{"Config":{"RootFS":"/"}}' | sudo tee "$ROOT/root/.fex-emu/Config.json" >/dev/null
-          sudo tee "$ROOT/run.sh" >/dev/null <<'SH'
+          cat > /tmp/run.sh <<'SH'
           set -u
           export WINEPREFIX=/opt/rit-prefix WINEARCH=win32 WINEDEBUG=-all
           export WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=:99 HOME=/root XDG_RUNTIME_DIR=/tmp/xdg
-          export PATH=/opt/wine-stable/bin:/usr/bin:/bin
           mkdir -p /tmp/xdg
           Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 & sleep 3
           CLIENT="$WINEPREFIX/drive_c/Program Files/Rotman/RIT User Application/Client.exe"
-          echo "== chroot guest sees: =="
-          head -c 40 /opt/wine-stable/share/wine/wine.inf >/dev/null 2>&1 && echo "  wine.inf readable" || echo "  wine.inf NOT readable"
+          echo "== guest can now read rootfs files? =="
+          head -c 40 /opt/wine-stable/share/wine/wine.inf >/dev/null 2>&1 && echo "  wine.inf READABLE" || echo "  wine.inf NOT readable"
           ls /opt/wine-stable/lib/wine/i386-unix/winex11.so >/dev/null 2>&1 && echo "  winex11.so present" || echo "  winex11.so MISSING"
+          ls /opt/rit-prefix/drive_c >/dev/null 2>&1 && echo "  prefix readable" || echo "  prefix NOT readable"
           echo "== launching RIT under FEX (slow; .NET JIT-on-JIT) =="
           wine "$CLIENT" >/tmp/rit.log 2>&1 &
           ok=0
@@ -100,5 +97,6 @@ jobs:
           wineserver -k 2>/dev/null || true
           test "$ok" = 1
           SH
-          # x86 binaries inside the chroot execute transparently via the FEX binfmt handler.
-          sudo chroot "$ROOT" /bin/bash /run.sh
+          # place the script inside the rootfs so the guest sees it at /run.sh
+          cp /tmp/run.sh ~/.fex-emu/RootFS/rit/run.sh
+          FEXBash -c 'bash /run.sh'
