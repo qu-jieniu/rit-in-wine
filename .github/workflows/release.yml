@@ -85,7 +85,7 @@ jobs:
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
-      - run: echo "TODO: mac/build-wine-from-source.sh + mac/build-intel-app.sh"
+      - run: echo "TODO mac/build-wine-from-source.sh + mac/build-intel-app.sh"
 
   # ---------- Attach everything to the Release ----------
   publish:
