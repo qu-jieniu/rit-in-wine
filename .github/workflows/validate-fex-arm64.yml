@@ -96,6 +96,12 @@ jobs:
           echo "== fonts present? =="
           ls "$WINEPREFIX/drive_c/windows/Fonts" 2>&1 | head -3
           ls /opt/wine-stable/share/wine/fonts 2>&1 | head -3
+          echo "== display state =="
+          pgrep -a Xvfb || echo "  Xvfb NOT running"
+          ls -la /tmp/.X11-unix/ 2>&1 | head
+          echo "== why won't winex11 load? (x11drv trace) =="
+          WINEDEBUG=+x11drv,+winediag timeout 40 wine winecfg >/tmp/x11.log 2>&1 || true
+          grep -aiE "x11drv|XOpenDisplay|cannot|failed|libX11|no display|driver" /tmp/x11.log | head -12
           echo "== launching RIT under FEX (slow; .NET JIT-on-JIT) =="
           wine "$CLIENT" >/tmp/rit.log 2>&1 &
           ok=0
