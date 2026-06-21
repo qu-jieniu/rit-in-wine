@@ -3,13 +3,12 @@
 #
 # The whole working Wine 11 + .NET + RIT userspace (a Debian rootfs) is bundled, so
 # the AppImage runs on ANY 64-bit Linux host with zero dependencies — no 32-bit
-# libs, no winex11 whack-a-mole. bwrap (from inside the rootfs, invoked via the
-# rootfs's own loader so it needs nothing from the host) maps the rootfs as / and
-# binds in the host's X socket. Display is the host's native X (or XWayland) — a
-# real window, no VNC. Teardown: --die-with-parent + --unshare-pid means the
-# kernel reaps every process (wineserver, services…) when the launcher dies,
-# however it dies (incl. Force Quit). Requires unprivileged user namespaces
-# (default on all modern distros).
+# libs, no winex11 whack-a-mole. bwrap (bundled IN the rootfs) maps the rootfs as /
+# and binds in the host's X socket; once inside, Wine loads only the bundled libs.
+# Display is the host's native X / XWayland — a real window, no VNC. Teardown:
+# --die-with-parent + --unshare-pid means the kernel reaps every process
+# (wineserver, services…) when the launcher dies, however it dies (incl. Force
+# Quit). Requires unprivileged user namespaces (default on all modern distros).
 set -u
 HERE="$(dirname "$(readlink -f "$0")")"
 R="$HERE/rootfs"
@@ -24,17 +23,20 @@ if [ ! -f "$PFX/.rit-ready" ]; then
     touch "$PFX/.rit-ready"
 fi
 
-# Invoke the rootfs's bwrap through the rootfs's own dynamic loader, so it depends
-# on nothing from the host (the host only needs a kernel with user namespaces).
-LD="$R/lib64/ld-linux-x86-64.so.2"
-LP="$R/lib/x86_64-linux-gnu:$R/usr/lib/x86_64-linux-gnu:$R/lib64:$R/usr/lib"
+# Invoke the rootfs's bwrap through the rootfs's OWN loader *file* (not the
+# /lib64/ld-linux symlink — that's absolute and would resolve to the host's
+# loader, mixing libcs and crashing). With the real loader + the rootfs library
+# path, bwrap and everything it loads come solely from the bundle.
+LD="$R/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+LP="$R/usr/lib/x86_64-linux-gnu:$R/lib/x86_64-linux-gnu:$R/lib64:$R/usr/lib"
+XAUTH="${XAUTHORITY:-$HOME/.Xauthority}"
 
 exec "$LD" --library-path "$LP" "$R/usr/bin/bwrap" \
     --bind "$R" / \
     --bind "$PFX" /opt/rit-prefix \
     --dev /dev --proc /proc --tmpfs /tmp --tmpfs /run --tmpfs /dev/shm \
     --ro-bind-try /tmp/.X11-unix /tmp/.X11-unix \
-    --ro-bind-try "${XAUTHORITY:-$HOME/.Xauthority}" /root/.Xauthority \
+    --ro-bind-try "$XAUTH" /root/.Xauthority \
     --ro-bind-try /etc/resolv.conf /etc/resolv.conf \
     --setenv HOME /root \
     --setenv DISPLAY "${DISPLAY:-:0}" \
