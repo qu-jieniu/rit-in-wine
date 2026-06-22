@@ -1,0 +1,12 @@
+# RIT server (Instructor Application) installed into a Wine 11 + .NET 4.8 win32
+# prefix — same runtime as the client. Build context = server/ (the MSI is local,
+# gitignored). The license is NOT baked; it's entered at runtime (and is required
+# only to run a case, not to launch/serve).
+ARG BASE=rit-prefix:dotnet48-win32
+FROM ${BASE}
+COPY in/RIT-Instructor-1.8.464.msi /tmp/server.msi
+RUN export WINEPREFIX=/opt/rit-prefix WINEARCH=win32 WINEDEBUG=-all \
+        WINEDLLOVERRIDES="mscoree=n;mshtml=d" DISPLAY=:99 ; \
+    (Xvfb :99 -screen 0 1024x768x24 -ac >/dev/null 2>&1 &) ; sleep 3 ; \
+    wine msiexec /i /tmp/server.msi /qn ; wineserver -w ; rm -f /tmp/server.msi
+ENTRYPOINT []

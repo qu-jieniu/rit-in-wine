@@ -49,3 +49,14 @@ MSI/decompiled payload is gitignored).
 3. **A valid Rotman license** entered in Settings (Name + Key) — *required*.
 4. Open `:10000` (clients) and `:10002` (if using the server API) on the host.
 5. Load the case file(s) for your course.
+
+## Verified under Wine (2026-06-22)
+Installed `RIT Instructor Application-1.8.464.msi` into a Wine 11 + .NET 4.8 win32
+prefix (`server/Dockerfile.installed` → `rit-server:installed`) and launched
+`Server.exe`. Result — the **full network stack works under Wine**, no license needed:
+- `:10000` (client connection port) — listening
+- `:10002` (HttpListener REST API) — listening, serves **HTTP 401** with JSON (same
+  http.sys path as the client's `:9999`, which Wine 11 handles natively)
+
+So the server deploys on the exact same runtime as the client. The license only
+gates **running a case** — to be entered (Name + Key) once renewed.
